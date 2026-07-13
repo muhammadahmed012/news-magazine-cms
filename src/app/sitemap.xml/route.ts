@@ -5,13 +5,15 @@ import { NextResponse } from "next/server";
 export async function GET() {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://chronicle.com";
 
-  const [sitemapSetting, indexingSetting] = await Promise.all([
-    prisma.setting.findUnique({ where: { key: "sitemap_settings" } }),
-    prisma.setting.findUnique({ where: { key: "indexing_settings" } }),
-  ]);
-
   let sitemapConfig = { posts: true, pages: true, categories: true };
+  let indexingConfig = { discourageIndexing: false };
+
   try {
+    const [sitemapSetting, indexingSetting] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: "sitemap_settings" } }),
+      prisma.setting.findUnique({ where: { key: "indexing_settings" } }),
+    ]);
+
     if (sitemapSetting) {
       const raw = JSON.parse(sitemapSetting.value);
       sitemapConfig = {
@@ -20,69 +22,70 @@ export async function GET() {
         categories: raw.categories ?? raw.includeCategories ?? true,
       };
     }
-  } catch {}
 
-  let indexingConfig = { discourageIndexing: false };
-  try { if (indexingSetting) indexingConfig = JSON.parse(indexingSetting.value); } catch {}
+    if (indexingSetting) indexingConfig = JSON.parse(indexingSetting.value);
+  } catch {
+    // DB unavailable — use defaults
+  }
 
   const entries: string[] = [];
 
   if (!indexingConfig.discourageIndexing) {
-    // Homepage
     entries.push(`  <url>
     <loc>${siteUrl}</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>`);
 
-    // Posts
-    if (sitemapConfig.posts) {
-      const posts = await prisma.post.findMany({
-        where: { status: "PUBLISHED" },
-        select: { slug: true, updatedAt: true, category: { select: { slug: true } } },
-        orderBy: { publishedAt: "desc" },
-      });
-      for (const post of posts) {
-        entries.push(`  <url>
+    try {
+      if (sitemapConfig.posts) {
+        const posts = await prisma.post.findMany({
+          where: { status: "PUBLISHED" },
+          select: { slug: true, updatedAt: true, category: { select: { slug: true } } },
+          orderBy: { publishedAt: "desc" },
+        });
+        for (const post of posts) {
+          entries.push(`  <url>
     <loc>${siteUrl}/${post.category.slug}/${post.slug}</loc>
     <lastmod>${post.updatedAt.toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>`);
+        }
       }
-    }
 
-    // Pages
-    if (sitemapConfig.pages) {
-      const pages = await prisma.page.findMany({
-        where: { status: "PUBLISHED" },
-        select: { slug: true, updatedAt: true },
-        orderBy: { updatedAt: "desc" },
-      });
-      for (const page of pages) {
-        entries.push(`  <url>
+      if (sitemapConfig.pages) {
+        const pages = await prisma.page.findMany({
+          where: { status: "PUBLISHED" },
+          select: { slug: true, updatedAt: true },
+          orderBy: { updatedAt: "desc" },
+        });
+        for (const page of pages) {
+          entries.push(`  <url>
     <loc>${siteUrl}/${page.slug}</loc>
     <lastmod>${page.updatedAt.toISOString()}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>`);
+        }
       }
-    }
 
-    // Categories
-    if (sitemapConfig.categories) {
-      const categories = await prisma.category.findMany({
-        select: { slug: true, updatedAt: true },
-        orderBy: { name: "asc" },
-      });
-      for (const cat of categories) {
-        entries.push(`  <url>
+      if (sitemapConfig.categories) {
+        const categories = await prisma.category.findMany({
+          select: { slug: true, updatedAt: true },
+          orderBy: { name: "asc" },
+        });
+        for (const cat of categories) {
+          entries.push(`  <url>
     <loc>${siteUrl}/${cat.slug}</loc>
     <lastmod>${cat.updatedAt.toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>`);
+        }
       }
+    } catch {
+      // DB queries failed — return minimal sitemap
     }
   }
 

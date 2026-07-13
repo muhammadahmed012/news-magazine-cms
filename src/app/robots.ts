@@ -5,11 +5,13 @@ import { prisma } from "@/lib/db";
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://chronicle.com";
 
-  const indexingSetting = await prisma.setting.findUnique({ where: { key: "indexing_settings" } });
   let indexingConfig = { discourageIndexing: false };
   try {
+    const indexingSetting = await prisma.setting.findUnique({ where: { key: "indexing_settings" } });
     if (indexingSetting) indexingConfig = JSON.parse(indexingSetting.value);
-  } catch {}
+  } catch {
+    // DB unavailable during build — use defaults
+  }
 
   if (indexingConfig.discourageIndexing) {
     return {

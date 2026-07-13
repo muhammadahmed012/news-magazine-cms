@@ -12,6 +12,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ["@prisma/client", "bcryptjs"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

@@ -17,7 +17,12 @@ const playfair = Playfair_Display({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const general = await getSetting("general_settings");
+  let general: Record<string, string> | null = null;
+  try {
+    general = await getSetting("general_settings");
+  } catch {
+    // DB unavailable — use defaults
+  }
   return {
     title: {
       default: general?.siteName || "Chronicle",
@@ -33,7 +38,12 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   // Fetch branding and theme colors from Database
-  const colors = await getSetting("theme_colors");
+  let colors: Record<string, string> | null = null;
+  try {
+    colors = await getSetting("theme_colors");
+  } catch {
+    // DB unavailable — use defaults
+  }
 
   const primary = colors?.primary || "#5F4A8B";
   const secondary = colors?.secondary || "#FEFACD";
