@@ -1,0 +1,264 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String?
+  email        String    @unique
+  passwordHash String?
+  image        String?
+  role         String    @default("SUBSCRIBER") // ADMIN, EDITOR, AUTHOR, CONTRIBUTOR, SUBSCRIBER
+  bio          String?
+  title        String?   // e.g. "Senior Tech Editor"
+  facebookUrl  String?
+  twitterUrl   String?
+  linkedinUrl  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  
+  posts        Post[]    @relation("AuthorPosts")
+  pages        Page[]
+  comments     Comment[]
+  sessions     Session[]
+  accounts     Account[]
+  logs         ActivityLog[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Post {
+  id              String    @id @default(cuid())
+  title           String
+  subtitle        String?
+  slug            String    @unique
+  content         String    // Rich text editor JSON or HTML
+  excerpt         String?
+  featuredImage   String?
+  gallery         String?   // JSON string of image URLs
+  videoUrl        String?
+  audioUrl        String?
+  status          String    @default("DRAFT") // DRAFT, SCHEDULED, PUBLISHED, ARCHIVED
+  publishedAt     DateTime?
+  readingTime     Int       @default(0)
+  viewCount       Int       @default(0)
+  
+  // Custom Flags
+  isFeatured      Boolean   @default(false)
+  isBreaking      Boolean   @default(false)
+  isEditorPick    Boolean   @default(false)
+  isTrending      Boolean   @default(false)
+  isSponsored     Boolean   @default(false)
+  isSticky        Boolean   @default(false)
+
+  // SEO Fields
+  seoTitle        String?
+  seoDescription  String?
+  focusKeywords   String?   // Comma separated keywords
+  canonicalUrl    String?
+  robotsMeta      String?   // e.g. "index, follow"
+  schemaType      String    @default("NewsArticle") // NewsArticle, BlogPosting, etc.
+  structuredData  String?   // Custom JSON-LD schema override
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  authorId        String
+  author          User      @relation("AuthorPosts", fields: [authorId], references: [id], onDelete: Restrict)
+  
+  categoryId      String
+  category        Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  
+  tags            Tag[]     @relation("PostTags")
+  comments        Comment[]
+  revisions       Revision[]
+  attachments     Attachment[]
+}
+
+model Page {
+  id              String    @id @default(cuid())
+  title           String
+  slug            String    @unique
+  content         String    // Rich text editor JSON or HTML
+  excerpt         String?
+  featuredImage   String?
+  status          String    @default("DRAFT") // DRAFT, PUBLISHED
+  
+  // SEO Fields
+  seoTitle        String?
+  seoDescription  String?
+  focusKeywords   String?   // Comma separated keywords
+  canonicalUrl    String?
+  robotsMeta      String?   // e.g. "index, follow"
+  schemaType      String    @default("WebPage") // WebPage, AboutPage, ContactPage, FAQPage, etc.
+  structuredData  String?   // Custom JSON-LD schema override
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  authorId        String
+  author          User      @relation(fields: [authorId], references: [id], onDelete: Restrict)
+}
+
+model Category {
+  id               String    @id @default(cuid())
+  name             String
+  slug             String    @unique
+  description      String?
+  longDescription  String?   // Full rich description shown at bottom of category page
+  icon             String?   // Lucide icon name
+  image            String?
+  color            String?   // Hex code overlay
+  layoutStyle      String    @default("grid") // grid, list, editorial, sidebar
+  order            Int       @default(0)
+  
+  // SEO fields
+  seoTitle       String?
+  seoDescription String?
+
+  parentId       String?
+  parent         Category?  @relation("ParentChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children       Category[] @relation("ParentChildren")
+
+  posts          Post[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Tag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  posts       Post[]   @relation("PostTags")
+  createdAt   DateTime @default(now())
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  fileName   String
+  fileUrl    String
+  fileSize   Int
+  mimeType   String
+  folderPath String   @default("/") // e.g. "/images", "/documents"
+  altText    String?
+  caption    String?
+  createdAt  DateTime @default(now())
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  status    String   @default("APPROVED") // PENDING, APPROVED, SPAM, TRASH
+  
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  // Guest fields if authorId is null
+  guestName  String?
+  guestEmail String?
+
+  parentId  String?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Ad {
+  id             String    @id @default(cuid())
+  title          String
+  placement      String    // HEADER, FOOTER, SIDEBAR, HOMEPAGE, MOBILE, ABOVE_HEADING, BELOW_HEADING, AFTER_PARA_1, AFTER_PARA_2, AFTER_PARA_3, START_OF_ARTICLE, END_OF_ARTICLE
+  type           String    @default("IMAGE") // IMAGE, HTML, GOOGLE_ADS
+  code           String?   // For custom HTML or Google AdSense script
+  imageUrl       String?
+  targetUrl      String?
+  status         String    @default("ACTIVE") // ACTIVE, INACTIVE
+  impressions    Int       @default(0)
+  clicks         Int       @default(0)
+  startDate      DateTime?
+  endDate        DateTime?
+  desktopOnly    Boolean   @default(false)
+  mobileOnly     Boolean   @default(false)
+  targetSection  String?   // For HOMEPAGE placement: section ID to insert after
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Setting {
+  key       String   @id // e.g. "theme_colors", "homepage_layout", "header_config", "general_settings"
+  value     String   // JSON payload stored as text
+  updatedAt DateTime @updatedAt
+}
+
+model NewsletterSubscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model Revision {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  excerpt   String?
+  createdAt DateTime @default(now())
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  fileName  String
+  fileUrl   String
+  fileSize  Int
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   // e.g. "POST_CREATE", "USER_LOGIN"
+  details   String?  // JSON context
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
