@@ -33,6 +33,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         category: { select: { name: true, slug: true, color: true } },
       },
       orderBy: { publishedAt: "desc" },
+      take: 20,
     });
   }
 

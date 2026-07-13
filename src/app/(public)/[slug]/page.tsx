@@ -7,7 +7,13 @@ import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { generatePageSchema, generatePageBreadcrumbSchema } from "@/lib/seo";
 import type { Metadata } from "next";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const categories = await prisma.category.findMany({ select: { slug: true } });
+  const pages = await prisma.page.findMany({ where: { status: "PUBLISHED" }, select: { slug: true } });
+  return [...categories, ...pages].map((item) => ({ slug: item.slug }));
+}
 
 const POSTS_PER_PAGE = 12;
 

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { Clock, Tag } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 interface TagPageProps {
   params: Promise<{
@@ -27,6 +27,7 @@ export default async function TagPage({ params }: TagPageProps) {
       tags: { some: { id: tag.id } },
     },
     orderBy: { publishedAt: "desc" },
+    take: 30,
     include: {
       author: { select: { name: true } },
       category: { select: { name: true, slug: true, color: true } },

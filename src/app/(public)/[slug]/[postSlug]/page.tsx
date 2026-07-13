@@ -9,7 +9,17 @@ import CommentForm from "./CommentForm";
 import ShareButtons from "@/components/public/ShareButtons";
 import { generateNewsArticleSchema, generateBreadcrumbSchema } from "@/lib/seo";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
+
+export async function generateStaticParams() {
+  const posts = await prisma.post.findMany({
+    where: { status: "PUBLISHED" },
+    select: { slug: true, category: { select: { slug: true } } },
+    orderBy: { publishedAt: "desc" },
+    take: 50,
+  });
+  return posts.map((post) => ({ slug: post.category.slug, postSlug: post.slug }));
+}
 
 interface PostPageProps {
   params: Promise<{
@@ -205,8 +215,8 @@ export default async function PostDetailPage({ params }: PostPageProps) {
     notFound();
   }
 
-  // 2. Increment view count asynchronously in background
-  await incrementPostViews(post.id);
+  // 2. Increment view count asynchronously (non-blocking)
+  incrementPostViews(post.id).catch(() => {});
 
   // 3. Compile TipTap content & headings
   const { html } = parseTipTap(post.content);

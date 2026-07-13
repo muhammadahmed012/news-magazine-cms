@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Calendar, Clock, TrendingUp, BookOpen, ChevronRight } from "lucide-react";
 import CategoryCardRenderer from "@/components/public/CategoryCardStyles";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 interface LayoutSection {
   id: string;
