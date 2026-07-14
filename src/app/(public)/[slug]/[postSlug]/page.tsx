@@ -1,8 +1,10 @@
 // src/app/(public)/[category]/[postSlug]/page.tsx
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { incrementPostViews } from "@/actions/posts";
 import Link from "next/link";
+import Image from "next/image";
 import { Calendar, Eye, User, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import CommentForm from "./CommentForm";
@@ -322,11 +324,15 @@ export default async function PostDetailPage({ params }: PostPageProps) {
         <article className="lg:col-span-8 flex flex-col gap-8">
           {startOfArticleAd && <InlineAd ad={startOfArticleAd} />}
           {post.featuredImage && (
-            <div className="aspect-[21/10] overflow-hidden rounded-sm bg-bg-light border border-border-subtle shadow-sm select-none">
-              <img
+            <div className="aspect-[21/10] overflow-hidden rounded-sm bg-bg-light border border-border-subtle shadow-sm select-none relative">
+              <Image
                 src={post.featuredImage}
                 alt={post.title}
-                className="w-full h-full object-cover"
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 66vw"
+                className="object-cover"
+                quality={85}
               />
             </div>
           )}
@@ -370,11 +376,15 @@ export default async function PostDetailPage({ params }: PostPageProps) {
           {/* Author Box */}
           <div className="bg-bg-light border border-border-subtle p-6 rounded-md flex gap-4 sm:gap-6 mt-6 select-none">
             {post.author.image ? (
-              <img
-                src={post.author.image}
-                alt={post.author.name || ""}
-                className="w-16 h-16 rounded-full object-cover shrink-0"
-              />
+              <div className="w-16 h-16 rounded-full overflow-hidden shrink-0 relative">
+                <Image
+                  src={post.author.image}
+                  alt={post.author.name || ""}
+                  fill
+                  sizes="64px"
+                  className="object-cover"
+                />
+              </div>
             ) : (
               <div className="w-16 h-16 rounded-full bg-brand-primary text-white flex items-center justify-center font-bold text-xl shrink-0">
                 {post.author.name?.[0]?.toUpperCase()}
@@ -400,51 +410,54 @@ export default async function PostDetailPage({ params }: PostPageProps) {
           </div>
 
           {/* Comments Section */}
-          <div className="border-t border-border-subtle pt-12 mt-8 flex flex-col gap-8">
-            <h3 className="font-serif font-black text-xl text-text-primary flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-brand-primary" /> Comments ({post.comments.length})
-            </h3>
-            
-            {/* Comment Submission Component (Client component) */}
-            <CommentForm postId={post.id} session={session} />
+          <Suspense fallback={<div className="h-[300px] bg-gray-50 rounded-md animate-pulse" />}>
+            <div className="border-t border-border-subtle pt-12 mt-8 flex flex-col gap-8">
+              <h3 className="font-serif font-black text-xl text-text-primary flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-brand-primary" /> Comments ({post.comments.length})
+              </h3>
+              
+              {/* Comment Submission Component (Client component) */}
+              <CommentForm postId={post.id} session={session} />
 
-            {/* List of comments */}
-            <div className="divide-y divide-border-subtle">
-              {post.comments.map((comment) => (
-                <div key={comment.id} className="py-6 first:pt-0 flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-gray-200 text-text-primary flex items-center justify-center font-bold text-sm shrink-0">
-                    {(comment.author?.name || comment.guestName)?.[0]?.toUpperCase()}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-text-primary">
-                        {comment.author?.name || comment.guestName}
-                      </span>
-                      <span className="text-[10px] text-gray-400 font-semibold">
-                        {new Date(comment.createdAt).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
+              {/* List of comments */}
+              <div className="divide-y divide-border-subtle">
+                {post.comments.map((comment) => (
+                  <div key={comment.id} className="py-6 first:pt-0 flex gap-4">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 text-text-primary flex items-center justify-center font-bold text-sm shrink-0">
+                      {(comment.author?.name || comment.guestName)?.[0]?.toUpperCase()}
                     </div>
-                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed font-medium">
-                      {comment.content}
-                    </p>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-text-primary">
+                          {comment.author?.name || comment.guestName}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-semibold">
+                          {new Date(comment.createdAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-gray-600 leading-relaxed font-medium">
+                        {comment.content}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {post.comments.length === 0 && (
-                <p className="text-xs text-gray-400 font-semibold italic text-center py-6">No discussions yet. Be the first to share your thoughts.</p>
-              )}
+                ))}
+                {post.comments.length === 0 && (
+                  <p className="text-xs text-gray-400 font-semibold italic text-center py-6">No discussions yet. Be the first to share your thoughts.</p>
+                )}
+              </div>
             </div>
-          </div>
+          </Suspense>
         </article>
 
         {/* Sidebar Panel (col-span-4) */}
         <aside className="lg:col-span-4 flex flex-col gap-8 select-none">
           {/* Configurable Sidebar Widgets */}
-          {sidebarWidgets.filter((w: any) => w.enabled).map((widget: any) => {
+          <Suspense fallback={<div className="h-[200px] bg-gray-50 rounded-md animate-pulse" />}>
+            {sidebarWidgets.filter((w: any) => w.enabled).map((widget: any) => {
             if (widget.type === "ad") {
               const ad = sidebarAd;
               if (!ad) return null;
@@ -526,8 +539,8 @@ export default async function PostDetailPage({ params }: PostPageProps) {
                     {posts.map((p: any) => (
                       <div key={p.id} className="flex gap-3 group">
                         {p.featuredImage && (
-                          <Link href={`/${p.category.slug}/${p.slug}`} className="w-16 h-12 rounded overflow-hidden shrink-0 bg-gray-100">
-                            <img src={p.featuredImage} alt="" className="w-full h-full object-cover" />
+                          <Link href={`/${p.category.slug}/${p.slug}`} className="w-16 h-12 rounded overflow-hidden shrink-0 bg-gray-100 relative">
+                            <Image src={p.featuredImage} alt="" fill sizes="64px" className="object-cover" />
                           </Link>
                         )}
                         <div className="flex flex-col gap-1 min-w-0">
@@ -558,6 +571,7 @@ export default async function PostDetailPage({ params }: PostPageProps) {
 
             return null;
           })}
+          </Suspense>
 
           {/* Related Articles (always shown at bottom) */}
           {relatedPosts.length > 0 && (

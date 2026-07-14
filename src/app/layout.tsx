@@ -8,12 +8,14 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
 });
 
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
   display: "swap",
+  preload: true,
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,7 +39,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Fetch branding and theme colors from Database
   let colors: Record<string, string> | null = null;
   try {
     colors = await getSetting("theme_colors");
@@ -53,29 +54,27 @@ export default async function RootLayout({
   const border = colors?.border || "#EAEAEA";
   const primaryHover = colors?.primaryHover || "#4C3B70";
 
+  const themeStyles = `
+    :root {
+      --brand-primary: ${primary};
+      --brand-secondary: ${secondary};
+      --brand-primary-hover: ${primaryHover};
+      --bg-primary: ${background};
+      --bg-light: ${lightGray};
+      --text-primary: ${text};
+      --border-subtle: ${border};
+      --font-sans: var(--font-inter), system-ui, sans-serif;
+      --font-serif: var(--font-playfair), Georgia, serif;
+    }
+  `;
+
   return (
     <html
       lang="en"
       className={`${inter.variable} ${playfair.variable} h-full antialiased`}
     >
       <head>
-        <style
-          dangerouslySetInnerHTML={{
-            __html: `
-              :root {
-                --brand-primary: ${primary};
-                --brand-secondary: ${secondary};
-                --brand-primary-hover: ${primaryHover};
-                --bg-primary: ${background};
-                --bg-light: ${lightGray};
-                --text-primary: ${text};
-                --border-subtle: ${border};
-                --font-sans: var(--font-inter), system-ui, sans-serif;
-                --font-serif: var(--font-playfair), Georgia, serif;
-              }
-            `,
-          }}
-        />
+        <style dangerouslySetInnerHTML={{ __html: themeStyles }} />
       </head>
       <body className="min-h-full flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] transition-colors duration-200" suppressHydrationWarning>
         {children}
