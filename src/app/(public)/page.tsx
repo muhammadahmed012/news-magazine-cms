@@ -1,7 +1,6 @@
 // src/app/(public)/page.tsx
 import { Suspense } from "react";
 import { getHomepageLayout, getCategories, getHomepageAds } from "@/lib/queries";
-import { prisma } from "@/lib/db";
 import Link from "next/link";
 import HeroSection from "@/components/public/sections/HeroSection";
 import LatestNewsSection from "@/components/public/sections/LatestNewsSection";
@@ -55,8 +54,7 @@ async function CategoryBar() {
   );
 }
 
-async function AdSection({ adId }: { adId: string }) {
-  const ads = await getHomepageAds();
+function AdSection({ adId, ads }: { adId: string; ads: any[] }) {
   const matchingAd = ads.find((ad: any) => ad.targetSection === adId);
   if (!matchingAd) return null;
   return (
@@ -117,6 +115,7 @@ async function SectionRenderer({ section }: { section: LayoutSection }) {
     case "NewsletterSignup":
       return <NewsletterSection />;
     case "CategoryBlock": {
+      const { prisma } = await import("@/lib/db");
       const posts = await prisma.post.findMany({
         where: { status: "PUBLISHED", category: { slug: settings?.categorySlug } },
         orderBy: { publishedAt: "desc" },
@@ -169,7 +168,7 @@ export default async function HomePage() {
               <SectionRenderer section={sec} />
             </Suspense>
             <Suspense fallback={null}>
-              <AdSection adId={sec.id} />
+              <AdSection adId={sec.id} ads={activeAds} />
             </Suspense>
           </div>
         ))}

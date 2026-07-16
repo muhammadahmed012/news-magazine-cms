@@ -1,8 +1,10 @@
 // src/app/(admin)/admin/posts/edit/[id]/page.tsx
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import PostEditor from "@/components/admin/PostEditor";
+import lazy from "next/dynamic";
 import { auth } from "@/lib/auth";
+
+const PostEditor = lazy(() => import("@/components/admin/PostEditor"));
 
 export const dynamic = "force-dynamic";
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { generatePageSchema, generatePageBreadcrumbSchema } from "@/lib/seo";
 import type { Metadata } from "next";
+import OptimizedImage from "@/components/public/OptimizedImage";
 
 export const revalidate = 300;
 
@@ -138,10 +139,12 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
             <article key={post.id} className="flex flex-col group">
               <Link href={`/${slug}/${post.slug}`} className="block overflow-hidden mb-4 relative aspect-[3/2] bg-gray-100 rounded-sm">
                 {post.featuredImage && (
-                  <img
+                  <OptimizedImage
                     src={post.featuredImage}
                     alt={post.title}
-                    className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    className="object-cover group-hover:scale-[1.02] transition-transform duration-500"
                   />
                 )}
                 {post.isFeatured && (

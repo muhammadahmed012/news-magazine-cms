@@ -12,6 +12,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+  },
   serverExternalPackages: ["@prisma/client", "bcryptjs"],
   images: {
     remotePatterns: [

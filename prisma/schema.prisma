@@ -106,6 +106,15 @@ model Post {
   comments        Comment[]
   revisions       Revision[]
   attachments     Attachment[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([categoryId])
+  @@index([authorId])
+  @@index([viewCount(sort: Desc)])
+  @@index([status, isFeatured, publishedAt(sort: Desc)])
+  @@index([status, isTrending])
+  @@index([status, isEditorPick])
+  @@index([status, isBreaking])
 }
 
 model Page {
@@ -156,6 +165,9 @@ model Category {
   posts          Post[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+
+  @@index([parentId])
+  @@index([order])
 }
 
 model Tag {
@@ -199,6 +211,9 @@ model Comment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([postId, status])
+  @@index([authorId])
 }
 
 model Ad {
@@ -219,6 +234,9 @@ model Ad {
   targetSection  String?   // For HOMEPAGE placement: section ID to insert after
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  @@index([placement, status])
+  @@index([status])
 }
 
 model Setting {

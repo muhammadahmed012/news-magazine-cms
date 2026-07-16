@@ -22,9 +22,13 @@ export default function PublicLayout({
       <Suspense fallback={<HeaderFallback />}>
         <Header />
       </Suspense>
-      <AdBanner placement="HEADER" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2" />
+      <Suspense fallback={null}>
+        <AdBanner placement="HEADER" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2" />
+      </Suspense>
       <main className="flex-grow">{children}</main>
-      <AdBanner placement="FOOTER" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4" />
+      <Suspense fallback={null}>
+        <AdBanner placement="FOOTER" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4" />
+      </Suspense>
       <Suspense fallback={<FooterFallback />}>
         <Footer />
       </Suspense>

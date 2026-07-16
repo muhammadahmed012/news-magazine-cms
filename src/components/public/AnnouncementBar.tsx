@@ -1,6 +1,6 @@
 // src/components/public/AnnouncementBar.tsx
 import Link from "next/link";
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 interface AnnouncementProps {
   text: string;

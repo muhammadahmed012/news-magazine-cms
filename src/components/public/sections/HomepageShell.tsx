@@ -1,6 +1,5 @@
 // src/components/public/sections/HomepageShell.tsx
-import { getHomepageLayout, getCategories, getHomepageAds } from "@/lib/queries";
-import { prisma } from "@/lib/db";
+import { getHomepageLayout, getCategories } from "@/lib/queries";
 import Link from "next/link";
 
 export default async function HomepageShell() {

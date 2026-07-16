@@ -90,57 +90,77 @@ export const getHomepageAds = unstable_cache(
   { revalidate: 300, tags: ["ads"] }
 );
 
-export async function getHeroPosts() {
-  const featured = await prisma.post.findFirst({
-    where: { status: "PUBLISHED", isFeatured: true },
-    orderBy: { publishedAt: "desc" },
-    include: postInclude,
-  });
-  const sidePosts = await prisma.post.findMany({
-    where: { status: "PUBLISHED", id: featured ? { not: featured.id } : undefined },
-    orderBy: { publishedAt: "desc" },
-    take: 4,
-    include: postInclude,
-  });
-  return featured ? [featured, ...sidePosts] : sidePosts;
-}
+export const getHeroPosts = unstable_cache(
+  async () => {
+    const featured = await prisma.post.findFirst({
+      where: { status: "PUBLISHED", isFeatured: true },
+      orderBy: { publishedAt: "desc" },
+      include: postInclude,
+    });
+    const sidePosts = await prisma.post.findMany({
+      where: { status: "PUBLISHED", id: featured ? { not: featured.id } : undefined },
+      orderBy: { publishedAt: "desc" },
+      take: 4,
+      include: postInclude,
+    });
+    return featured ? [featured, ...sidePosts] : sidePosts;
+  },
+  ["hero-posts"],
+  { revalidate: 300, tags: ["posts"] }
+);
 
-export async function getSectionPosts(
-  type: string,
-  limit: number,
-  categorySlug?: string,
-  isEditorPick?: boolean
-) {
-  const where: any = { status: "PUBLISHED" };
-  if (categorySlug) where.category = { slug: categorySlug };
-  if (isEditorPick) where.isEditorPick = true;
-
-  return prisma.post.findMany({
-    where,
-    orderBy: { publishedAt: "desc" },
-    take: limit,
-    include: postInclude,
-  });
-}
-
-export async function getSidebarPosts(type: string, globalTrending: any[], categorySlug?: string) {
-  if (type === "trending") return globalTrending;
-  if (type === "latest") {
+const getLatestSidebarPosts = unstable_cache(
+  async () => {
     return prisma.post.findMany({
       where: { status: "PUBLISHED" },
       orderBy: { publishedAt: "desc" },
       take: 6,
       include: postIncludeMinimal,
     });
-  }
-  if (type === "category" && categorySlug) {
+  },
+  ["sidebar-latest-posts"],
+  { revalidate: 300, tags: ["posts"] }
+);
+
+const getCategorySidebarPosts = unstable_cache(
+  async (categorySlug: string) => {
     return prisma.post.findMany({
       where: { status: "PUBLISHED", category: { slug: categorySlug } },
       orderBy: { publishedAt: "desc" },
       take: 6,
       include: postIncludeMinimal,
     });
-  }
+  },
+  ["sidebar-category-posts"],
+  { revalidate: 300, tags: ["posts"] }
+);
+
+export const getSectionPosts = unstable_cache(
+  async (
+    type: string,
+    limit: number,
+    categorySlug?: string,
+    isEditorPick?: boolean
+  ) => {
+    const where: any = { status: "PUBLISHED" };
+    if (categorySlug) where.category = { slug: categorySlug };
+    if (isEditorPick) where.isEditorPick = true;
+
+    return prisma.post.findMany({
+      where,
+      orderBy: { publishedAt: "desc" },
+      take: limit,
+      include: postInclude,
+    });
+  },
+  ["section-posts"],
+  { revalidate: 300, tags: ["posts"] }
+);
+
+export async function getSidebarPosts(type: string, globalTrending: any[], categorySlug?: string) {
+  if (type === "trending") return globalTrending;
+  if (type === "latest") return getLatestSidebarPosts();
+  if (type === "category" && categorySlug) return getCategorySidebarPosts(categorySlug);
   return globalTrending;
 }
 
@@ -170,29 +190,71 @@ export async function getRelatedPosts(categoryId: string, postId: string) {
   });
 }
 
-export async function getPostPageData() {
-  return Promise.all([
-    prisma.ad.findFirst({ where: { placement: "SIDEBAR", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "ABOVE_HEADING", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "BELOW_HEADING", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "AFTER_PARA_1", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "AFTER_PARA_2", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "AFTER_PARA_3", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "START_OF_ARTICLE", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "END_OF_ARTICLE", status: "ACTIVE" } }),
-    prisma.setting.findUnique({ where: { key: "sidebar_config" } }),
-    prisma.setting.findUnique({ where: { key: "footer_config" } }),
-    prisma.post.findMany({
-      where: { status: "PUBLISHED" },
-      orderBy: { viewCount: "desc" },
-      take: 5,
-      include: { category: { select: { slug: true, name: true } } },
-    }),
-    prisma.post.findMany({
-      where: { status: "PUBLISHED" },
-      orderBy: { publishedAt: "desc" },
-      take: 5,
-      include: { category: { select: { slug: true, name: true } } },
-    }),
-  ]);
-}
+export const getAllActiveAds = unstable_cache(
+  async () => {
+    return prisma.ad.findMany({
+      where: { status: "ACTIVE" },
+    });
+  },
+  ["all-active-ads"],
+  { revalidate: 300, tags: ["ads"] }
+);
+
+export const getAdByPlacement = unstable_cache(
+  async (placement: string) => {
+    try {
+      const now = new Date();
+      const ads = await prisma.ad.findMany({
+        where: {
+          placement,
+          status: "ACTIVE",
+          OR: [
+            { startDate: null },
+            { startDate: { lte: now } },
+          ],
+          AND: [
+            { OR: [{ endDate: null }, { endDate: { gte: now } }] },
+          ],
+        },
+        orderBy: { impressions: "asc" },
+        take: 1,
+      });
+      return ads[0] || null;
+    } catch {
+      return null;
+    }
+  },
+  ["ad-by-placement"],
+  { revalidate: 300, tags: ["ads"] }
+);
+
+export const getPostPageData = unstable_cache(
+  async () => {
+    return Promise.all([
+      prisma.ad.findFirst({ where: { placement: "SIDEBAR", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "ABOVE_HEADING", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "BELOW_HEADING", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "AFTER_PARA_1", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "AFTER_PARA_2", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "AFTER_PARA_3", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "START_OF_ARTICLE", status: "ACTIVE" } }),
+      prisma.ad.findFirst({ where: { placement: "END_OF_ARTICLE", status: "ACTIVE" } }),
+      prisma.setting.findUnique({ where: { key: "sidebar_config" } }),
+      prisma.setting.findUnique({ where: { key: "footer_config" } }),
+      prisma.post.findMany({
+        where: { status: "PUBLISHED" },
+        orderBy: { viewCount: "desc" },
+        take: 5,
+        include: { category: { select: { slug: true, name: true } } },
+      }),
+      prisma.post.findMany({
+        where: { status: "PUBLISHED" },
+        orderBy: { publishedAt: "desc" },
+        take: 5,
+        include: { category: { select: { slug: true, name: true } } },
+      }),
+    ]);
+  },
+  ["post-page-data"],
+  { revalidate: 300, tags: ["ads", "settings", "posts"] }
+);

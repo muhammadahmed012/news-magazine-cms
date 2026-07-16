@@ -6,11 +6,10 @@ import NewsTicker from "./NewsTicker";
 import HeaderClient from "./HeaderClient";
 
 export default async function Header() {
-  const [general, config, session, footerConfig] = await Promise.all([
+  const [general, config, session] = await Promise.all([
     getSetting("general_settings"),
     getSetting("header_config"),
     auth(),
-    getSetting("footer_config"),
   ]);
 
   const siteName = general?.siteName || "Chronicle";

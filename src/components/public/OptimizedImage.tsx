@@ -13,11 +13,6 @@ interface OptimizedImageProps {
   style?: React.CSSProperties;
 }
 
-function getBlurDataURL(src: string): string | undefined {
-  if (!src || src.startsWith("data:")) return undefined;
-  return undefined;
-}
-
 export default function OptimizedImage({
   src,
   alt,

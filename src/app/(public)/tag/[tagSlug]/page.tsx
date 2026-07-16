@@ -3,8 +3,16 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { Clock, Tag } from "lucide-react";
+import OptimizedImage from "@/components/public/OptimizedImage";
 
 export const revalidate = 300;
+
+export async function generateStaticParams() {
+  const tags = await prisma.tag.findMany({
+    select: { slug: true },
+  });
+  return tags.map((tag) => ({ tagSlug: tag.slug }));
+}
 
 interface TagPageProps {
   params: Promise<{
@@ -60,10 +68,12 @@ export default async function TagPage({ params }: TagPageProps) {
           <article key={post.id} className="flex flex-col group">
             <Link href={`/${post.category.slug}/${post.slug}`} className="block overflow-hidden mb-4 relative aspect-[3/2] bg-gray-100 rounded-sm">
               {post.featuredImage && (
-                <img
+                <OptimizedImage
                   src={post.featuredImage}
                   alt={post.title}
-                  className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                  fill
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  className="object-cover group-hover:scale-[1.02] transition-transform duration-500"
                 />
               )}
             </Link>

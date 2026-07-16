@@ -1,6 +1,7 @@
 // src/components/public/CategoryCardStyles.tsx
 import Link from "next/link";
-import { Calendar, ArrowRight, Clock, TrendingUp } from "lucide-react";
+import { Calendar, ArrowRight, Clock } from "lucide-react";
+import OptimizedImage from "@/components/public/OptimizedImage";
 
 interface Post {
   id: string;
@@ -18,20 +19,6 @@ interface Post {
 function formatDate(date: Date | string | null) {
   if (!date) return "";
   return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function timeAgo(date: Date | string | null) {
-  if (!date) return "";
-  const d = new Date(date);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return formatDate(date);
 }
 
 function SectionHeader({ title, categorySlug }: { title: string; categorySlug?: string }) {
@@ -60,7 +47,7 @@ function StyleClassic({ posts, title, categorySlug }: { posts: Post[]; title: st
             <Link href={`/${post.category.slug}/${post.slug}`} className="block overflow-hidden relative">
               {post.featuredImage ? (
                 <div className="relative overflow-hidden aspect-[16/10]">
-                  <img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <OptimizedImage src={post.featuredImage} alt={post.title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
               ) : (
                 <div className="w-full aspect-[16/10] bg-gray-100" />
@@ -96,7 +83,7 @@ function StyleOverlay({ posts, title, categorySlug }: { posts: Post[]; title: st
         {posts.map((post) => (
           <Link key={post.id} href={`/${post.category.slug}/${post.slug}`} className="group relative overflow-hidden rounded-lg aspect-[3/4]">
             {post.featuredImage ? (
-              <img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+              <OptimizedImage src={post.featuredImage} alt={post.title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
             )}
@@ -132,7 +119,7 @@ function StyleMagazine({ posts, title, categorySlug }: { posts: Post[]; title: s
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Link href={`/${first.category.slug}/${first.slug}`} className="group relative overflow-hidden rounded-lg aspect-[4/3]">
           {first.featuredImage ? (
-            <img src={first.featuredImage} alt={first.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+            <OptimizedImage src={first.featuredImage} alt={first.title} fill sizes="(max-width: 1024px) 100vw, 50vw" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
           )}
@@ -148,7 +135,7 @@ function StyleMagazine({ posts, title, categorySlug }: { posts: Post[]; title: s
             <Link key={post.id} href={`/${post.category.slug}/${post.slug}`} className="group flex gap-4 items-center p-3 rounded-lg hover:bg-gray-50 transition-colors">
               {post.featuredImage && (
                 <div className="w-28 h-20 rounded-md overflow-hidden shrink-0">
-                  <img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <OptimizedImage src={post.featuredImage} alt={post.title} fill sizes="112px" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
               )}
               <div className="flex flex-col gap-1 min-w-0">
@@ -179,7 +166,7 @@ function StyleBento({ posts, title, categorySlug }: { posts: Post[]; title: stri
         {first && (
           <Link href={`/${first.category.slug}/${first.slug}`} className="group col-span-2 row-span-2 relative overflow-hidden rounded-lg">
             {first.featuredImage ? (
-              <img src={first.featuredImage} alt={first.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+              <OptimizedImage src={first.featuredImage} alt={first.title} fill sizes="(max-width: 1024px) 100vw, 67vw" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
             )}
@@ -195,7 +182,7 @@ function StyleBento({ posts, title, categorySlug }: { posts: Post[]; title: stri
         {second && (
           <Link href={`/${second.category.slug}/${second.slug}`} className="group relative overflow-hidden rounded-lg">
             {second.featuredImage ? (
-              <img src={second.featuredImage} alt={second.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+              <OptimizedImage src={second.featuredImage} alt={second.title} fill sizes="(max-width: 1024px) 50vw, 33vw" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
             )}
@@ -210,7 +197,7 @@ function StyleBento({ posts, title, categorySlug }: { posts: Post[]; title: stri
         {third && (
           <Link href={`/${third.category.slug}/${third.slug}`} className="group relative overflow-hidden rounded-lg">
             {third.featuredImage ? (
-              <img src={third.featuredImage} alt={third.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+              <OptimizedImage src={third.featuredImage} alt={third.title} fill sizes="(max-width: 1024px) 50vw, 33vw" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
             )}
@@ -225,7 +212,7 @@ function StyleBento({ posts, title, categorySlug }: { posts: Post[]; title: stri
         {fourth && (
           <Link href={`/${fourth.category.slug}/${fourth.slug}`} className="group relative overflow-hidden rounded-lg">
             {fourth.featuredImage ? (
-              <img src={fourth.featuredImage} alt={fourth.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+              <OptimizedImage src={fourth.featuredImage} alt={fourth.title} fill sizes="(max-width: 1024px) 50vw, 33vw" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
             )}
@@ -257,7 +244,7 @@ function StyleTimeline({ posts, title, categorySlug }: { posts: Post[]; title: s
               <div className="flex gap-5 items-start">
                 {post.featuredImage && (
                   <Link href={`/${post.category.slug}/${post.slug}`} className="w-32 h-24 sm:w-40 sm:h-28 rounded-lg overflow-hidden shrink-0 shadow-sm border border-gray-100">
-                    <img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <OptimizedImage src={post.featuredImage} alt={post.title} fill sizes="(max-width: 640px) 128px, 160px" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   </Link>
                 )}
                 <div className="flex flex-col gap-1.5 min-w-0">
@@ -288,7 +275,7 @@ function StyleCompactOverlay({ posts, title, categorySlug }: { posts: Post[]; ti
         {posts.map((post, idx) => (
           <Link key={post.id} href={`/${post.category.slug}/${post.slug}`} className={`group relative overflow-hidden rounded-lg ${idx === 0 ? "row-span-2 col-span-2 aspect-[4/3] lg:aspect-auto" : "aspect-square"}`}>
             {post.featuredImage ? (
-              <img src={post.featuredImage} alt={post.title} className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+              <OptimizedImage src={post.featuredImage} alt={post.title} fill sizes="(max-width: 1024px) 50vw, 25vw" className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
             ) : (
               <div className="absolute inset-0 bg-gradient-to-br from-gray-300 to-gray-500" />
             )}
@@ -324,7 +311,7 @@ function StyleBigRank({ posts, title, categorySlug }: { posts: Post[]; title: st
             </span>
             {post.featuredImage ? (
               <div className="w-28 h-20 sm:w-36 sm:h-24 rounded-lg overflow-hidden shrink-0">
-                <img src={post.featuredImage} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <OptimizedImage src={post.featuredImage} alt={post.title} fill sizes="(max-width: 640px) 112px, 144px" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
               </div>
             ) : (
               <div className="w-28 h-20 sm:w-36 sm:h-24 rounded-lg bg-gray-100 shrink-0" />
@@ -365,7 +352,7 @@ function StyleFeatureGrid({ posts, title, categorySlug }: { posts: Post[]; title
             <Link key={post!.id} href={`/${post!.category.slug}/${post!.slug}`} className="group relative overflow-hidden rounded-xl bg-white border border-gray-200 hover:shadow-xl transition-all duration-300">
               <div className="aspect-[16/9] overflow-hidden">
                 {post!.featuredImage ? (
-                  <img src={post!.featuredImage} alt={post!.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                  <OptimizedImage src={post!.featuredImage} alt={post!.title} fill sizes="(max-width: 1024px) 100vw, 50vw" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
                 )}
@@ -387,7 +374,7 @@ function StyleFeatureGrid({ posts, title, categorySlug }: { posts: Post[]; title
             <Link key={post!.id} href={`/${post!.category.slug}/${post!.slug}`} className="group flex gap-4 items-center bg-white border border-gray-200 rounded-xl p-3 hover:shadow-lg transition-all duration-300">
               {post!.featuredImage ? (
                 <div className="w-24 h-24 rounded-lg overflow-hidden shrink-0">
-                  <img src={post!.featuredImage} alt={post!.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  <OptimizedImage src={post!.featuredImage} alt={post!.title} fill sizes="96px" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
               ) : (
                 <div className="w-24 h-24 rounded-lg bg-gray-100 shrink-0" />
@@ -418,7 +405,7 @@ function StyleHeroPill({ posts, title, categorySlug }: { posts: Post[]; title: s
         {/* Big hero card */}
         <Link href={`/${first.category.slug}/${first.slug}`} className="group relative overflow-hidden rounded-2xl aspect-[21/9] sm:aspect-[2.8/1]">
           {first.featuredImage ? (
-            <img src={first.featuredImage} alt={first.title} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700" />
+            <OptimizedImage src={first.featuredImage} alt={first.title} fill sizes="100vw" className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-700" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-200 to-gray-400" />
           )}
@@ -451,7 +438,7 @@ function StyleHeroPill({ posts, title, categorySlug }: { posts: Post[]; title: s
               <Link key={post.id} href={`/${post.category.slug}/${post.slug}`} className="group flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-3 pl-1 hover:shadow-lg hover:border-brand-primary/20 transition-all duration-300">
                 {post.featuredImage ? (
                   <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 ring-2 ring-brand-primary/20 group-hover:ring-brand-primary/40 transition-all">
-                    <img src={post.featuredImage} alt="" className="w-full h-full object-cover" />
+                    <OptimizedImage src={post.featuredImage} alt="" fill sizes="64px" className="w-full h-full object-cover" />
                   </div>
                 ) : (
                   <div className="w-16 h-16 rounded-lg bg-gray-100 shrink-0" />

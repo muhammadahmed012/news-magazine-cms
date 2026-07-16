@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { Calendar, Search } from "lucide-react";
+import OptimizedImage from "@/components/public/OptimizedImage";
 
 export const dynamic = "force-dynamic";
 
@@ -95,10 +96,12 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     href={`/${post.category.slug}/${post.slug}`}
                     className="aspect-[16/9] overflow-hidden bg-bg-light block"
                   >
-                    <img
+                    <OptimizedImage
                       src={post.featuredImage}
                       alt={post.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
                     />
                   </Link>
                 )}

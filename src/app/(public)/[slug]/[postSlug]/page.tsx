@@ -2,13 +2,15 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { getPostPageData } from "@/lib/queries";
 import { incrementPostViews } from "@/actions/posts";
 import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Eye, User, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import CommentForm from "./CommentForm";
-import ShareButtons from "@/components/public/ShareButtons";
+import dynamic from "next/dynamic";
+const ShareButtons = dynamic(() => import("@/components/public/ShareButtons"));
 import { generateNewsArticleSchema, generateBreadcrumbSchema } from "@/lib/seo";
 
 export const revalidate = 60;
@@ -18,7 +20,7 @@ export async function generateStaticParams() {
     where: { status: "PUBLISHED" },
     select: { slug: true, category: { select: { slug: true } } },
     orderBy: { publishedAt: "desc" },
-    take: 50,
+    take: 200,
   });
   return posts.map((post) => ({ slug: post.category.slug, postSlug: post.slug }));
 }
@@ -194,7 +196,7 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   const resolvedParams = await params;
   const { category: categorySlug, postSlug } = resolvedParams;
 
-  // 1. Fetch post details
+  // 1. Fetch post details (must be first for not-found check)
   const post = await prisma.post.findUnique({
     where: { slug: postSlug },
     include: {
@@ -223,30 +225,23 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   // 3. Compile TipTap content & headings
   const { html } = parseTipTap(post.content);
 
-  // 4. Fetch related posts
-  const relatedPosts = await prisma.post.findMany({
-    where: {
-      categoryId: post.categoryId,
-      id: { not: post.id },
-      status: "PUBLISHED",
-    },
-    take: 3,
-    orderBy: { publishedAt: "desc" },
-  });
-
-  const [sidebarAd, aboveHeadingAd, belowHeadingAd, afterPara1Ad, afterPara2Ad, afterPara3Ad, startOfArticleAd, endOfArticleAd, sidebarConfig, footerSetting, trendingPosts, latestPosts] = await Promise.all([
-    prisma.ad.findFirst({ where: { placement: "SIDEBAR", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "ABOVE_HEADING", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "BELOW_HEADING", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "AFTER_PARA_1", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "AFTER_PARA_2", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "AFTER_PARA_3", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "START_OF_ARTICLE", status: "ACTIVE" } }),
-    prisma.ad.findFirst({ where: { placement: "END_OF_ARTICLE", status: "ACTIVE" } }),
-    prisma.setting.findUnique({ where: { key: "sidebar_config" } }),
-    prisma.setting.findUnique({ where: { key: "footer_config" } }),
-    prisma.post.findMany({ where: { status: "PUBLISHED" }, orderBy: { viewCount: "desc" }, take: 5, include: { category: { select: { slug: true, name: true } } } }),
-    prisma.post.findMany({ where: { status: "PUBLISHED" }, orderBy: { publishedAt: "desc" }, take: 5, include: { category: { select: { slug: true, name: true } } } }),
+  // 4. Fetch all secondary data in parallel using cached queries
+  const [
+    relatedPosts,
+    [sidebarAd, aboveHeadingAd, belowHeadingAd, afterPara1Ad, afterPara2Ad, afterPara3Ad, startOfArticleAd, endOfArticleAd, sidebarConfig, footerSetting, trendingPosts, latestPosts],
+    session,
+  ] = await Promise.all([
+    prisma.post.findMany({
+      where: {
+        categoryId: post.categoryId,
+        id: { not: post.id },
+        status: "PUBLISHED",
+      },
+      take: 3,
+      orderBy: { publishedAt: "desc" },
+    }),
+    getPostPageData(),
+    auth(),
   ]);
 
   let sidebarWidgets: any[] = [];
@@ -258,8 +253,6 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   try {
     socialLinks = footerSetting ? JSON.parse(footerSetting.value).socialLinks || {} : {};
   } catch { socialLinks = {}; }
-
-  const session = await auth();
 
   const publishedDate = post.publishedAt
     ? new Date(post.publishedAt).toLocaleDateString("en-US", {
