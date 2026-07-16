@@ -9,11 +9,17 @@ import type { Metadata } from "next";
 import OptimizedImage from "@/components/public/OptimizedImage";
 
 export const revalidate = 300;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const categories = await prisma.category.findMany({ select: { slug: true } });
-  const pages = await prisma.page.findMany({ where: { status: "PUBLISHED" }, select: { slug: true } });
-  return [...categories, ...pages].map((item) => ({ slug: item.slug }));
+  try {
+    const categories = await prisma.category.findMany({ select: { slug: true } });
+    const pages = await prisma.page.findMany({ where: { status: "PUBLISHED" }, select: { slug: true } });
+    return [...categories, ...pages].map((item) => ({ slug: item.slug }));
+  } catch (error) {
+    console.error("[SSG] Failed to generate slug params:", error);
+    return [];
+  }
 }
 
 const POSTS_PER_PAGE = 12;
@@ -60,14 +66,18 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
   const slug = resolvedParams.slug;
   const currentPage = Math.max(1, Number(resolvedSearchParams.page) || 1);
 
-  // 1. Try to find a category first
-  const category = await prisma.category.findUnique({
-    where: { slug: slug },
-    include: {
-      children: true,
-      parent: true,
-    },
-  });
+  let category: (any & { children: any[]; parent: any | null }) | null = null;
+  try {
+    category = await prisma.category.findUnique({
+      where: { slug: slug },
+      include: {
+        children: true,
+        parent: true,
+      },
+    });
+  } catch (error) {
+    console.error("[SlugPage] Failed to fetch category:", error);
+  }
 
   if (category) {
     const offset = (currentPage - 1) * POSTS_PER_PAGE;
@@ -75,17 +85,22 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
     const { posts } = await getPosts({ categorySlug: slug, limit: POSTS_PER_PAGE, offset });
     const layout = category.layoutStyle || "grid";
 
-    const totalCount = await prisma.post.count({
-      where: {
-        status: "PUBLISHED",
-        category: {
-          OR: [
-            { slug: slug },
-            { parent: { slug: slug } }
-          ]
+    let totalCount = 0;
+    try {
+      totalCount = await prisma.post.count({
+        where: {
+          status: "PUBLISHED",
+          category: {
+            OR: [
+              { slug: slug },
+              { parent: { slug: slug } }
+            ]
+          }
         }
-      }
-    });
+      });
+    } catch (error) {
+      console.error("[SlugPage] Failed to count posts:", error);
+    }
     const totalPages = Math.ceil(totalCount / POSTS_PER_PAGE);
 
     const buildPageUrl = (page: number) => {
@@ -120,7 +135,7 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
           </div>
           {category.children.length > 0 && (
             <div className="flex gap-2 flex-wrap md:justify-end max-w-sm">
-              {category.children.map((child) => (
+              {category.children.map((child: any) => (
                 <Link
                   key={child.id}
                   href={`/${child.slug}`}
@@ -244,15 +259,20 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
   }
 
   // 2. Try to find a page if category is not found
-  const page = await prisma.page.findUnique({
-    where: { slug: slug, status: "PUBLISHED" },
-    include: { author: { select: { name: true, title: true, image: true } } },
-  });
+  let page: any = null;
+  try {
+    page = await prisma.page.findUnique({
+      where: { slug: slug, status: "PUBLISHED" },
+      include: { author: { select: { name: true, title: true, image: true } } },
+    });
+  } catch (error) {
+    console.error("[SlugPage] Failed to fetch page:", error);
+  }
 
   if (page) {
     let processedContent = page.content || "";
     const faqRegex = /<div[^>]*data-type="faq"[^>]*data-faq-items="([^"]*)"[^>]*><\/div>/g;
-    processedContent = processedContent.replace(faqRegex, (_match, encodedItems: string) => {
+    processedContent = processedContent.replace(faqRegex, (_match: string, encodedItems: string) => {
       try {
         const items = JSON.parse(decodeURIComponent(encodedItems));
         if (!items || items.length === 0) return "";

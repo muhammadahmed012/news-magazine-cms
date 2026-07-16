@@ -6,12 +6,18 @@ import { Clock, Tag } from "lucide-react";
 import OptimizedImage from "@/components/public/OptimizedImage";
 
 export const revalidate = 300;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const tags = await prisma.tag.findMany({
-    select: { slug: true },
-  });
-  return tags.map((tag) => ({ tagSlug: tag.slug }));
+  try {
+    const tags = await prisma.tag.findMany({
+      select: { slug: true },
+    });
+    return tags.map((tag) => ({ tagSlug: tag.slug }));
+  } catch (error) {
+    console.error("[SSG] Failed to generate tag params:", error);
+    return [];
+  }
 }
 
 interface TagPageProps {
@@ -23,24 +29,35 @@ interface TagPageProps {
 export default async function TagPage({ params }: TagPageProps) {
   const { tagSlug } = await params;
 
-  const tag = await prisma.tag.findUnique({
-    where: { slug: tagSlug },
-  });
+  let tag: any = null;
+  try {
+    tag = await prisma.tag.findUnique({
+      where: { slug: tagSlug },
+    });
+  } catch (error) {
+    console.error("[TagPage] Failed to fetch tag:", error);
+    notFound();
+  }
 
   if (!tag) notFound();
 
-  const posts = await prisma.post.findMany({
-    where: {
-      status: "PUBLISHED",
-      tags: { some: { id: tag.id } },
-    },
-    orderBy: { publishedAt: "desc" },
-    take: 30,
-    include: {
-      author: { select: { name: true } },
-      category: { select: { name: true, slug: true, color: true } },
-    },
-  });
+  let posts: any[] = [];
+  try {
+    posts = await prisma.post.findMany({
+      where: {
+        status: "PUBLISHED",
+        tags: { some: { id: tag.id } },
+      },
+      orderBy: { publishedAt: "desc" },
+      take: 30,
+      include: {
+        author: { select: { name: true } },
+        category: { select: { name: true, slug: true, color: true } },
+      },
+    });
+  } catch (error) {
+    console.error("[TagPage] Failed to fetch posts:", error);
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

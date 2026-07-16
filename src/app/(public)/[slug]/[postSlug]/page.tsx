@@ -14,15 +14,21 @@ const ShareButtons = dynamic(() => import("@/components/public/ShareButtons"));
 import { generateNewsArticleSchema, generateBreadcrumbSchema } from "@/lib/seo";
 
 export const revalidate = 60;
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const posts = await prisma.post.findMany({
-    where: { status: "PUBLISHED" },
-    select: { slug: true, category: { select: { slug: true } } },
-    orderBy: { publishedAt: "desc" },
-    take: 200,
-  });
-  return posts.map((post) => ({ slug: post.category.slug, postSlug: post.slug }));
+  try {
+    const posts = await prisma.post.findMany({
+      where: { status: "PUBLISHED" },
+      select: { slug: true, category: { select: { slug: true } } },
+      orderBy: { publishedAt: "desc" },
+      take: 50,
+    });
+    return posts.map((post) => ({ slug: post.category.slug, postSlug: post.slug }));
+  } catch (error) {
+    console.error("[SSG] Failed to generate post params:", error);
+    return [];
+  }
 }
 
 interface PostPageProps {
@@ -197,23 +203,29 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   const { category: categorySlug, postSlug } = resolvedParams;
 
   // 1. Fetch post details (must be first for not-found check)
-  const post = await prisma.post.findUnique({
-    where: { slug: postSlug },
-    include: {
-      author: true,
-      category: true,
-      tags: { select: { id: true, name: true, slug: true } },
-      comments: {
-        where: { status: "APPROVED" },
-        orderBy: { createdAt: "desc" },
-        include: {
-          author: {
-            select: { name: true, image: true, role: true }
+  let post;
+  try {
+    post = await prisma.post.findUnique({
+      where: { slug: postSlug },
+      include: {
+        author: true,
+        category: true,
+        tags: { select: { id: true, name: true, slug: true } },
+        comments: {
+          where: { status: "APPROVED" },
+          orderBy: { createdAt: "desc" },
+          include: {
+            author: {
+              select: { name: true, image: true, role: true }
+            }
           }
         }
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.error("[PostPage] Failed to fetch post:", error);
+    notFound();
+  }
 
   if (!post || post.status !== "PUBLISHED") {
     notFound();
@@ -226,23 +238,46 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   const { html } = parseTipTap(post.content);
 
   // 4. Fetch all secondary data in parallel using cached queries
-  const [
-    relatedPosts,
-    [sidebarAd, aboveHeadingAd, belowHeadingAd, afterPara1Ad, afterPara2Ad, afterPara3Ad, startOfArticleAd, endOfArticleAd, sidebarConfig, footerSetting, trendingPosts, latestPosts],
-    session,
-  ] = await Promise.all([
-    prisma.post.findMany({
-      where: {
-        categoryId: post.categoryId,
-        id: { not: post.id },
-        status: "PUBLISHED",
-      },
-      take: 3,
-      orderBy: { publishedAt: "desc" },
-    }),
-    getPostPageData(),
-    auth(),
-  ]);
+  let relatedPosts: any[] = [];
+  let sidebarAd: any = null;
+  let aboveHeadingAd: any = null;
+  let belowHeadingAd: any = null;
+  let afterPara1Ad: any = null;
+  let afterPara2Ad: any = null;
+  let afterPara3Ad: any = null;
+  let startOfArticleAd: any = null;
+  let endOfArticleAd: any = null;
+  let sidebarConfig: any = null;
+  let footerSetting: any = null;
+  let trendingPosts: any[] = [];
+  let latestPosts: any[] = [];
+  let session: any = null;
+
+  try {
+    [
+      relatedPosts,
+      [sidebarAd, aboveHeadingAd, belowHeadingAd, afterPara1Ad, afterPara2Ad, afterPara3Ad, startOfArticleAd, endOfArticleAd, sidebarConfig, footerSetting, trendingPosts, latestPosts],
+    ] = await Promise.all([
+      prisma.post.findMany({
+        where: {
+          categoryId: post.categoryId,
+          id: { not: post.id },
+          status: "PUBLISHED",
+        },
+        take: 3,
+        orderBy: { publishedAt: "desc" },
+      }),
+      getPostPageData(),
+    ]);
+  } catch (error) {
+    console.error("[PostPage] Failed to fetch secondary data:", error);
+  }
+
+  try {
+    session = await auth();
+  } catch {
+    session = null;
+  }
 
   let sidebarWidgets: any[] = [];
   try {

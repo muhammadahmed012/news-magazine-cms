@@ -116,15 +116,20 @@ async function SectionRenderer({ section }: { section: LayoutSection }) {
       return <NewsletterSection />;
     case "CategoryBlock": {
       const { prisma } = await import("@/lib/db");
-      const posts = await prisma.post.findMany({
-        where: { status: "PUBLISHED", category: { slug: settings?.categorySlug } },
-        orderBy: { publishedAt: "desc" },
-        take: settings?.postsCount || 4,
-        include: {
-          author: { select: { name: true, image: true } },
-          category: { select: { name: true, slug: true, color: true } },
-        },
-      });
+      let posts: any[] = [];
+      try {
+        posts = await prisma.post.findMany({
+          where: { status: "PUBLISHED", category: { slug: settings?.categorySlug } },
+          orderBy: { publishedAt: "desc" },
+          take: settings?.postsCount || 4,
+          include: {
+            author: { select: { name: true, image: true } },
+            category: { select: { name: true, slug: true, color: true } },
+          },
+        });
+      } catch (error) {
+        console.error("[SectionRenderer] Failed to fetch category posts:", error);
+      }
       if (posts.length === 0) return null;
       return (
         <CategoryCardRenderer
@@ -141,10 +146,21 @@ async function SectionRenderer({ section }: { section: LayoutSection }) {
 }
 
 export default async function HomePage() {
-  const [{ rawLayout, showCategoryBar }, activeAds] = await Promise.all([
-    getHomepageLayout(),
-    getHomepageAds(),
-  ]);
+  let rawLayout: any = null;
+  let showCategoryBar = true;
+  let activeAds: any[] = [];
+
+  try {
+    const [layoutData, ads] = await Promise.all([
+      getHomepageLayout(),
+      getHomepageAds(),
+    ]);
+    rawLayout = layoutData.rawLayout;
+    showCategoryBar = layoutData.showCategoryBar;
+    activeAds = ads;
+  } catch (error) {
+    console.error("[HomePage] Failed to fetch layout/ads:", error);
+  }
 
   const defaultLayout: LayoutSection[] = [
     { id: "default_hero", type: "HeroSlider", enabled: true, settings: {} },
