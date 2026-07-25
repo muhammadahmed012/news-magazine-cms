@@ -8,6 +8,7 @@ interface OptimizedImageProps {
   height?: number;
   className?: string;
   priority?: boolean;
+  fetchPriority?: "high" | "low" | "auto";
   fill?: boolean;
   sizes?: string;
   style?: React.CSSProperties;
@@ -20,6 +21,7 @@ export default function OptimizedImage({
   height,
   className = "",
   priority = false,
+  fetchPriority = "auto",
   fill = false,
   sizes,
   style,
@@ -29,6 +31,8 @@ export default function OptimizedImage({
   const isExternal =
     src.startsWith("http://") ||
     src.startsWith("https://");
+
+  const resolvedFetchPriority = priority ? "high" : fetchPriority;
 
   if (!isExternal) {
     return (
@@ -40,10 +44,13 @@ export default function OptimizedImage({
         className={className}
         style={style}
         loading={priority ? "eager" : "lazy"}
+        fetchPriority={resolvedFetchPriority}
         decoding="async"
       />
     );
   }
+
+  const quality = priority ? 80 : 75;
 
   if (fill) {
     return (
@@ -53,9 +60,10 @@ export default function OptimizedImage({
         fill
         className={className}
         priority={priority}
+        fetchPriority={resolvedFetchPriority}
         sizes={sizes || "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"}
         style={style}
-        quality={85}
+        quality={quality}
       />
     );
   }
@@ -68,9 +76,10 @@ export default function OptimizedImage({
       height={height || 450}
       className={className}
       priority={priority}
+      fetchPriority={resolvedFetchPriority}
       sizes={sizes || "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"}
       style={style}
-      quality={85}
+      quality={quality}
     />
   );
 }

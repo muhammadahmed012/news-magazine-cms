@@ -21,6 +21,7 @@ export default async function HeroSection() {
                 alt={mainPost.title}
                 fill
                 priority
+                fetchPriority="high"
                 sizes="(max-width: 1024px) 100vw, 58vw"
                 className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700 opacity-90"
               />

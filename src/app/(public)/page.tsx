@@ -11,7 +11,7 @@ import FeaturedSection from "@/components/public/sections/FeaturedSection";
 import CollectionSection from "@/components/public/sections/CollectionSection";
 import NewsletterSection from "@/components/public/sections/NewsletterSection";
 import CategoryCardRenderer from "@/components/public/CategoryCardStyles";
-import { SectionFallback, HeroFallback } from "@/components/public/sections/HomepageShell";
+import { SectionFallback } from "@/components/public/sections/HomepageShell";
 
 export const revalidate = 300;
 
@@ -194,9 +194,13 @@ export default async function HomePage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {layout.map((sec) => (
           <div key={sec.id}>
-            <Suspense fallback={sec.type === "HeroSlider" ? <HeroFallback /> : <SectionFallback />}>
+            {sec.type === "HeroSlider" ? (
               <SectionRenderer section={sec} />
-            </Suspense>
+            ) : (
+              <Suspense fallback={<SectionFallback />}>
+                <SectionRenderer section={sec} />
+              </Suspense>
+            )}
             <Suspense fallback={null}>
               <AdSection adId={sec.id} ads={activeAds} />
             </Suspense>
