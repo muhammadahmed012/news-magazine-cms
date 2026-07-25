@@ -1,6 +1,5 @@
 // src/components/public/modules/CategoryBlock.tsx
 import Link from "next/link";
-import { Calendar } from "lucide-react";
 
 interface Post {
   id: string;

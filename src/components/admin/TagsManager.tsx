@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Plus, Trash2, Tag, Search } from "lucide-react";
+import { Plus, Trash2, Tag, Search } from "lucide-react";
 
 interface TagItem {
   id: string;

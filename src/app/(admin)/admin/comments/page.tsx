@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { comments, posts, categories, users } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
 import { eq, desc } from "drizzle-orm";
-import { MessageSquare, CheckCircle, XCircle, Trash2, ExternalLink } from "lucide-react";
+import { CheckCircle, XCircle, Trash2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";

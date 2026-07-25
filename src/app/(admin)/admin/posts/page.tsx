@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { posts, users, categories } from "@/lib/schema";
 import { eq, desc, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
-import { Plus, Search, Calendar, User, Eye } from "lucide-react";
+import { Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 

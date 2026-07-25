@@ -9,18 +9,16 @@ import {
   tags,
   postTags,
   comments,
-  ads,
-  settings,
 } from "@/lib/schema";
-import { eq, desc, and, ne, sql, getTableColumns } from "drizzle-orm";
+import { eq, desc, and, ne, getTableColumns } from "drizzle-orm";
 import { getPostPageData } from "@/lib/queries";
 import { incrementPostViews } from "@/actions/posts";
 import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Eye, User, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
-import CommentForm from "./CommentForm";
 import dynamic from "next/dynamic";
+const CommentForm = dynamic(() => import("./CommentForm"));
 const ShareButtons = dynamic(() => import("@/components/public/ShareButtons"));
 import { generateNewsArticleSchema, generateBreadcrumbSchema } from "@/lib/seo";
 
@@ -349,10 +347,7 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   let session: any = null;
 
   try {
-    [
-      relatedPosts,
-      [sidebarAd, aboveHeadingAd, belowHeadingAd, afterPara1Ad, afterPara2Ad, afterPara3Ad, startOfArticleAd, endOfArticleAd, sidebarConfig, footerSetting, trendingPosts, latestPosts],
-    ] = await Promise.all([
+    const [related, pageData] = await Promise.all([
       db
         .select()
         .from(posts)
@@ -367,6 +362,19 @@ export default async function PostDetailPage({ params }: PostPageProps) {
         .limit(3),
       getPostPageData(),
     ]);
+    relatedPosts = related;
+    sidebarAd = pageData.sidebarAd;
+    aboveHeadingAd = pageData.aboveHeadingAd;
+    belowHeadingAd = pageData.belowHeadingAd;
+    afterPara1Ad = pageData.afterPara1Ad;
+    afterPara2Ad = pageData.afterPara2Ad;
+    afterPara3Ad = pageData.afterPara3Ad;
+    startOfArticleAd = pageData.startOfArticleAd;
+    endOfArticleAd = pageData.endOfArticleAd;
+    sidebarConfig = pageData.sidebarConfig;
+    footerSetting = pageData.footerConfig;
+    trendingPosts = pageData.trendingPosts;
+    latestPosts = pageData.latestPosts;
   } catch (error) {
     console.error("[PostPage] Failed to fetch secondary data:", error);
   }

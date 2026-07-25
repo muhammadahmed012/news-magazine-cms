@@ -8,7 +8,7 @@ export const getSetting = unstable_cache(
   async (key: string) => {
     try {
       const result = await db
-        .select()
+        .select({ value: settings.value })
         .from(settings)
         .where(eq(settings.key, key))
         .limit(1);

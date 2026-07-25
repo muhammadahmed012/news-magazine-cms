@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -22,8 +22,6 @@ import {
   Bold,
   Italic,
   Underline as UnderlineIcon,
-  Heading2,
-  Heading3,
   List,
   ListOrdered,
   AlignLeft,

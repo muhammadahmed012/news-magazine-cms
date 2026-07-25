@@ -1,7 +1,7 @@
 // src/app/(admin)/admin/theme/page.tsx
 import { getSetting } from "@/lib/settings";
 import { saveSetting } from "@/actions/admin-settings";
-import { Palette, CheckCircle, RefreshCw } from "lucide-react";
+import { Palette, CheckCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 

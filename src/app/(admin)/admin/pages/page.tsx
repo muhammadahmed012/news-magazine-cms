@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { pages, users } from "@/lib/schema";
 import { eq, desc, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
-import { Plus, Edit, Trash2, FileText } from "lucide-react";
+import { Plus, Edit, FileText } from "lucide-react";
 import DeletePageButton from "./DeletePageButton";
 
 export const dynamic = "force-dynamic";

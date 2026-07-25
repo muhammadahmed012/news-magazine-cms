@@ -3,7 +3,59 @@ import { db } from "@/lib/db";
 import { unstable_cache } from "next/cache";
 import { cache } from "react";
 import { posts, categories, ads, settings, postTags, users, tags, comments } from "@/lib/schema";
-import { eq, desc, and, or, lt, lte, gte, sql } from "drizzle-orm";
+import { eq, desc, and, or, inArray, lte, gte, sql } from "drizzle-orm";
+
+const POST_SELECT_LIGHT = {
+  id: posts.id,
+  title: posts.title,
+  subtitle: posts.subtitle,
+  slug: posts.slug,
+  excerpt: posts.excerpt,
+  featuredImage: posts.featuredImage,
+  status: posts.status,
+  publishedAt: posts.publishedAt,
+  readingTime: posts.readingTime,
+  viewCount: posts.viewCount,
+  isFeatured: posts.isFeatured,
+  isBreaking: posts.isBreaking,
+  isEditorPick: posts.isEditorPick,
+  isTrending: posts.isTrending,
+  isSponsored: posts.isSponsored,
+  isSticky: posts.isSticky,
+  createdAt: posts.createdAt,
+  updatedAt: posts.updatedAt,
+  authorId: posts.authorId,
+  categoryId: posts.categoryId,
+  author: {
+    name: users.name,
+    image: users.image,
+  },
+  category: {
+    name: categories.name,
+    slug: categories.slug,
+    color: categories.color,
+  },
+} as const;
+
+const POST_SELECT_FULL = {
+  ...POST_SELECT_LIGHT,
+  content: posts.content,
+  gallery: posts.gallery,
+  videoUrl: posts.videoUrl,
+  audioUrl: posts.audioUrl,
+  seoTitle: posts.seoTitle,
+  seoDescription: posts.seoDescription,
+  focusKeywords: posts.focusKeywords,
+  canonicalUrl: posts.canonicalUrl,
+  robotsMeta: posts.robotsMeta,
+  schemaType: posts.schemaType,
+  structuredData: posts.structuredData,
+  author: {
+    ...POST_SELECT_LIGHT.author,
+    title: users.title,
+    image: users.image,
+  },
+} as const;
 
 export const getPublishedPosts = unstable_cache(
   async (limit: number, offset = 0, categorySlug?: string) => {
@@ -17,50 +69,8 @@ export const getPublishedPosts = unstable_cache(
       );
     }
 
-    const results = await db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        gallery: posts.gallery,
-        videoUrl: posts.videoUrl,
-        audioUrl: posts.audioUrl,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        seoTitle: posts.seoTitle,
-        seoDescription: posts.seoDescription,
-        focusKeywords: posts.focusKeywords,
-        canonicalUrl: posts.canonicalUrl,
-        robotsMeta: posts.robotsMeta,
-        schemaType: posts.schemaType,
-        structuredData: posts.structuredData,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-          title: users.title,
-          image: users.image,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
+    return db
+      .select(POST_SELECT_FULL)
       .from(posts)
       .innerJoin(users, eq(posts.authorId, users.id))
       .innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -68,8 +78,6 @@ export const getPublishedPosts = unstable_cache(
       .orderBy(desc(posts.publishedAt))
       .limit(limit)
       .offset(offset);
-
-    return results;
   },
   ["published-posts"],
   { revalidate: 300, tags: ["posts"] }
@@ -78,37 +86,7 @@ export const getPublishedPosts = unstable_cache(
 export const getTrendingPosts = unstable_cache(
   async (limit = 6) => {
     return db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
+      .select(POST_SELECT_LIGHT)
       .from(posts)
       .innerJoin(users, eq(posts.authorId, users.id))
       .innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -123,8 +101,8 @@ export const getTrendingPosts = unstable_cache(
 export const getHomepageLayout = unstable_cache(
   async () => {
     const [layoutSetting, homepageSettingsRaw] = await Promise.all([
-      db.select().from(settings).where(eq(settings.key, "homepage_layout")).then((r) => r[0]),
-      db.select().from(settings).where(eq(settings.key, "homepage_settings")).then((r) => r[0]),
+      db.select({ value: settings.value }).from(settings).where(eq(settings.key, "homepage_layout")).then((r) => r[0]),
+      db.select({ value: settings.value }).from(settings).where(eq(settings.key, "homepage_settings")).then((r) => r[0]),
     ]);
 
     const rawLayout = layoutSetting ? JSON.parse(layoutSetting.value) : null;
@@ -168,113 +146,17 @@ export const getHomepageAds = unstable_cache(
 
 export const getHeroPosts = unstable_cache(
   async () => {
-    const featured = await db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        gallery: posts.gallery,
-        videoUrl: posts.videoUrl,
-        audioUrl: posts.audioUrl,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        seoTitle: posts.seoTitle,
-        seoDescription: posts.seoDescription,
-        focusKeywords: posts.focusKeywords,
-        canonicalUrl: posts.canonicalUrl,
-        robotsMeta: posts.robotsMeta,
-        schemaType: posts.schemaType,
-        structuredData: posts.structuredData,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-          title: users.title,
-          image: users.image,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
+    const allPosts = await db
+      .select(POST_SELECT_FULL)
       .from(posts)
       .innerJoin(users, eq(posts.authorId, users.id))
       .innerJoin(categories, eq(posts.categoryId, categories.id))
-      .where(and(eq(posts.status, "PUBLISHED"), eq(posts.isFeatured, true)))
-      .orderBy(desc(posts.publishedAt))
-      .limit(1)
-      .then((r) => r[0]);
+      .where(eq(posts.status, "PUBLISHED"))
+      .orderBy(desc(posts.isFeatured), desc(posts.publishedAt))
+      .limit(5);
 
-    const sidePosts = await db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        gallery: posts.gallery,
-        videoUrl: posts.videoUrl,
-        audioUrl: posts.audioUrl,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        seoTitle: posts.seoTitle,
-        seoDescription: posts.seoDescription,
-        focusKeywords: posts.focusKeywords,
-        canonicalUrl: posts.canonicalUrl,
-        robotsMeta: posts.robotsMeta,
-        schemaType: posts.schemaType,
-        structuredData: posts.structuredData,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-          title: users.title,
-          image: users.image,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
-      .from(posts)
-      .innerJoin(users, eq(posts.authorId, users.id))
-      .innerJoin(categories, eq(posts.categoryId, categories.id))
-      .where(
-        and(
-          eq(posts.status, "PUBLISHED"),
-          featured ? sql`${posts.id} != ${featured.id}` : sql`1=1`
-        )
-      )
-      .orderBy(desc(posts.publishedAt))
-      .limit(4);
+    const featured = allPosts.find((p) => p.isFeatured) || allPosts[0];
+    const sidePosts = allPosts.filter((p) => p.id !== featured?.id).slice(0, 4);
 
     return featured ? [featured, ...sidePosts] : sidePosts;
   },
@@ -285,37 +167,7 @@ export const getHeroPosts = unstable_cache(
 const getLatestSidebarPosts = unstable_cache(
   async () => {
     return db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
+      .select(POST_SELECT_LIGHT)
       .from(posts)
       .innerJoin(users, eq(posts.authorId, users.id))
       .innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -330,37 +182,7 @@ const getLatestSidebarPosts = unstable_cache(
 const getCategorySidebarPosts = unstable_cache(
   async (categorySlug: string) => {
     return db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
+      .select(POST_SELECT_LIGHT)
       .from(posts)
       .innerJoin(users, eq(posts.authorId, users.id))
       .innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -384,49 +206,7 @@ export const getSectionPosts = unstable_cache(
     if (isEditorPick) conditions.push(eq(posts.isEditorPick, true));
 
     return db
-      .select({
-        id: posts.id,
-        title: posts.title,
-        subtitle: posts.subtitle,
-        slug: posts.slug,
-        content: posts.content,
-        excerpt: posts.excerpt,
-        featuredImage: posts.featuredImage,
-        gallery: posts.gallery,
-        videoUrl: posts.videoUrl,
-        audioUrl: posts.audioUrl,
-        status: posts.status,
-        publishedAt: posts.publishedAt,
-        readingTime: posts.readingTime,
-        viewCount: posts.viewCount,
-        isFeatured: posts.isFeatured,
-        isBreaking: posts.isBreaking,
-        isEditorPick: posts.isEditorPick,
-        isTrending: posts.isTrending,
-        isSponsored: posts.isSponsored,
-        isSticky: posts.isSticky,
-        seoTitle: posts.seoTitle,
-        seoDescription: posts.seoDescription,
-        focusKeywords: posts.focusKeywords,
-        canonicalUrl: posts.canonicalUrl,
-        robotsMeta: posts.robotsMeta,
-        schemaType: posts.schemaType,
-        structuredData: posts.structuredData,
-        createdAt: posts.createdAt,
-        updatedAt: posts.updatedAt,
-        authorId: posts.authorId,
-        categoryId: posts.categoryId,
-        author: {
-          name: users.name,
-          title: users.title,
-          image: users.image,
-        },
-        category: {
-          name: categories.name,
-          slug: categories.slug,
-          color: categories.color,
-        },
-      })
+      .select(POST_SELECT_FULL)
       .from(posts)
       .innerJoin(users, eq(posts.authorId, users.id))
       .innerJoin(categories, eq(posts.categoryId, categories.id))
@@ -435,6 +215,21 @@ export const getSectionPosts = unstable_cache(
       .limit(limit);
   },
   ["section-posts"],
+  { revalidate: 300, tags: ["posts"] }
+);
+
+export const getCategoryPosts = unstable_cache(
+  async (categorySlug: string, limit: number) => {
+    return db
+      .select(POST_SELECT_LIGHT)
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(and(eq(posts.status, "PUBLISHED"), eq(categories.slug, categorySlug)))
+      .orderBy(desc(posts.publishedAt))
+      .limit(limit);
+  },
+  ["category-posts"],
   { revalidate: 300, tags: ["posts"] }
 );
 
@@ -461,36 +256,37 @@ export const getPostBySlug = cache(async (slug: string) => {
 
   if (!result) return null;
 
-  const postTagsResult = await db
-    .select({
-      tagId: postTags.tagId,
-      tagName: tags.name,
-      tagSlug: tags.slug,
-    })
-    .from(postTags)
-    .innerJoin(tags, eq(postTags.tagId, tags.id))
-    .where(eq(postTags.postId, result.post.id));
-
-  const commentsResult = await db
-    .select({
-      id: comments.id,
-      content: comments.content,
-      status: comments.status,
-      postId: comments.postId,
-      authorId: comments.authorId,
-      guestName: comments.guestName,
-      guestEmail: comments.guestEmail,
-      parentId: comments.parentId,
-      createdAt: comments.createdAt,
-      updatedAt: comments.updatedAt,
-      authorName: users.name,
-      authorImage: users.image,
-      authorRole: users.role,
-    })
-    .from(comments)
-    .leftJoin(users, eq(comments.authorId, users.id))
-    .where(and(eq(comments.postId, result.post.id), eq(comments.status, "APPROVED")))
-    .orderBy(desc(comments.createdAt));
+  const [postTagsResult, commentsResult] = await Promise.all([
+    db
+      .select({
+        tagId: postTags.tagId,
+        tagName: tags.name,
+        tagSlug: tags.slug,
+      })
+      .from(postTags)
+      .innerJoin(tags, eq(postTags.tagId, tags.id))
+      .where(eq(postTags.postId, result.post.id)),
+    db
+      .select({
+        id: comments.id,
+        content: comments.content,
+        status: comments.status,
+        postId: comments.postId,
+        authorId: comments.authorId,
+        guestName: comments.guestName,
+        guestEmail: comments.guestEmail,
+        parentId: comments.parentId,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        authorName: users.name,
+        authorImage: users.image,
+        authorRole: users.role,
+      })
+      .from(comments)
+      .leftJoin(users, eq(comments.authorId, users.id))
+      .where(and(eq(comments.postId, result.post.id), eq(comments.status, "APPROVED")))
+      .orderBy(desc(comments.createdAt)),
+  ]);
 
   return {
     ...result.post,
@@ -530,60 +326,45 @@ export async function getRelatedPosts(categoryId: string, postId: string) {
     .orderBy(desc(posts.publishedAt));
 }
 
-export const getAllActiveAds = unstable_cache(
-  async () => {
-    return db.select().from(ads).where(eq(ads.status, "ACTIVE"));
-  },
-  ["all-active-ads"],
-  { revalidate: 300, tags: ["ads"] }
-);
+const PLACEMENTS = [
+  "SIDEBAR",
+  "ABOVE_HEADING",
+  "BELOW_HEADING",
+  "AFTER_PARA_1",
+  "AFTER_PARA_2",
+  "AFTER_PARA_3",
+  "START_OF_ARTICLE",
+  "END_OF_ARTICLE",
+] as const;
 
 export const getAdByPlacement = unstable_cache(
   async (placement: string) => {
     try {
-      const now = new Date();
-      const result = await db
+      const [ad] = await db
         .select()
         .from(ads)
-        .where(
-          and(
-            eq(ads.placement, placement),
-            eq(ads.status, "ACTIVE"),
-            or(
-              sql`${ads.startDate} IS NULL`,
-              lte(ads.startDate, now)
-            )!,
-            or(
-              sql`${ads.endDate} IS NULL`,
-              gte(ads.endDate, now)
-            )!
-          )
-        )
-        .orderBy(ads.impressions)
-        .limit(1)
-        .then((r) => r[0]);
-      return result || null;
-    } catch {
+        .where(and(eq(ads.status, "ACTIVE"), eq(ads.placement, placement)))
+        .orderBy(desc(ads.createdAt))
+        .limit(1);
+      return ad ?? null;
+    } catch (error) {
+      console.error(`[queries] getAdByPlacement(${placement}) error:`, error);
       return null;
     }
   },
-  ["ad-by-placement"],
+  ["ad-placement"],
   { revalidate: 300, tags: ["ads"] }
 );
 
 export const getPostPageData = unstable_cache(
   async () => {
-    return Promise.all([
-      db.select().from(ads).where(and(eq(ads.placement, "SIDEBAR"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "ABOVE_HEADING"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "BELOW_HEADING"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "AFTER_PARA_1"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "AFTER_PARA_2"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "AFTER_PARA_3"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "START_OF_ARTICLE"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(ads).where(and(eq(ads.placement, "END_OF_ARTICLE"), eq(ads.status, "ACTIVE"))).then((r) => r[0]),
-      db.select().from(settings).where(eq(settings.key, "sidebar_config")).then((r) => r[0]),
-      db.select().from(settings).where(eq(settings.key, "footer_config")).then((r) => r[0]),
+    const [allAds, sidebarConfig, footerConfig, trendingPosts, latestPosts] = await Promise.all([
+      db
+        .select()
+        .from(ads)
+        .where(and(inArray(ads.placement, [...PLACEMENTS]), eq(ads.status, "ACTIVE"))),
+      db.select({ value: settings.value }).from(settings).where(eq(settings.key, "sidebar_config")).then((r) => r[0]),
+      db.select({ value: settings.value }).from(settings).where(eq(settings.key, "footer_config")).then((r) => r[0]),
       db
         .select({
           id: posts.id,
@@ -617,6 +398,23 @@ export const getPostPageData = unstable_cache(
         .orderBy(desc(posts.publishedAt))
         .limit(5),
     ]);
+
+    const adMap = new Map(allAds.map((ad) => [ad.placement, ad]));
+
+    return {
+      sidebarAd: adMap.get("SIDEBAR") || null,
+      aboveHeadingAd: adMap.get("ABOVE_HEADING") || null,
+      belowHeadingAd: adMap.get("BELOW_HEADING") || null,
+      afterPara1Ad: adMap.get("AFTER_PARA_1") || null,
+      afterPara2Ad: adMap.get("AFTER_PARA_2") || null,
+      afterPara3Ad: adMap.get("AFTER_PARA_3") || null,
+      startOfArticleAd: adMap.get("START_OF_ARTICLE") || null,
+      endOfArticleAd: adMap.get("END_OF_ARTICLE") || null,
+      sidebarConfig,
+      footerConfig,
+      trendingPosts,
+      latestPosts,
+    };
   },
   ["post-page-data"],
   { revalidate: 300, tags: ["ads", "settings", "posts"] }

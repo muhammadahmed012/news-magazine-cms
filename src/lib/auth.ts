@@ -7,7 +7,6 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { type JWT } from "next-auth/jwt";
 
-// Extend Auth.js user type definitions
 declare module "next-auth" {
   interface User {
     role?: string;
@@ -43,7 +42,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const result = await db
-          .select()
+          .select({
+            id: users.id,
+            name: users.name,
+            email: users.email,
+            image: users.image,
+            role: users.role,
+            title: users.title,
+            passwordHash: users.passwordHash,
+          })
           .from(users)
           .where(eq(users.email, credentials.email as string))
           .limit(1);

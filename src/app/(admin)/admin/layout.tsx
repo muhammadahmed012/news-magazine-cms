@@ -13,10 +13,8 @@ import {
   Megaphone,
   Settings,
   Globe,
-  LogOut,
   Users,
   MessageSquare,
-  ArrowLeft,
   PanelRight
 } from "lucide-react";
 

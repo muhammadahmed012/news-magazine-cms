@@ -1,9 +1,6 @@
 // src/app/(public)/page.tsx
 import { Suspense } from "react";
-import { getHomepageLayout, getCategories, getHomepageAds } from "@/lib/queries";
-import { db } from "@/lib/db";
-import { posts as postsTbl, categories as categoriesTbl, users as usersTbl } from "@/lib/schema";
-import { eq, desc, and, getTableColumns } from "drizzle-orm";
+import { getHomepageLayout, getCategories, getHomepageAds, getCategoryPosts } from "@/lib/queries";
 import Link from "next/link";
 import HeroSection from "@/components/public/sections/HeroSection";
 import LatestNewsSection from "@/components/public/sections/LatestNewsSection";
@@ -58,6 +55,7 @@ async function CategoryBar() {
 }
 
 function AdSection({ adId, ads }: { adId: string; ads: any[] }) {
+  if (ads.length === 0) return null;
   const matchingAd = ads.find((ad: any) => ad.targetSection === adId);
   if (!matchingAd) return null;
   return (
@@ -118,32 +116,9 @@ async function SectionRenderer({ section }: { section: LayoutSection }) {
     case "NewsletterSignup":
       return <NewsletterSection />;
     case "CategoryBlock": {
-      let categoryPosts: any[] = [];
-      try {
-        const rawPosts = await db
-          .select({
-            ...getTableColumns(postsTbl),
-            authorName: usersTbl.name,
-            authorImage: usersTbl.image,
-            categoryName: categoriesTbl.name,
-            categorySlug: categoriesTbl.slug,
-            categoryColor: categoriesTbl.color,
-          })
-          .from(postsTbl)
-          .innerJoin(usersTbl, eq(postsTbl.authorId, usersTbl.id))
-          .innerJoin(categoriesTbl, eq(postsTbl.categoryId, categoriesTbl.id))
-          .where(and(eq(postsTbl.status, "PUBLISHED"), eq(categoriesTbl.slug, settings?.categorySlug || "")))
-          .orderBy(desc(postsTbl.publishedAt))
-          .limit(settings?.postsCount || 4);
-
-        categoryPosts = rawPosts.map((row) => ({
-          ...row,
-          author: { name: row.authorName, image: row.authorImage },
-          category: { name: row.categoryName, slug: row.categorySlug, color: row.categoryColor },
-        }));
-      } catch (error) {
-        console.error("[SectionRenderer] Failed to fetch category posts:", error);
-      }
+      const slug = settings?.categorySlug || "";
+      if (!slug) return null;
+      const categoryPosts = await getCategoryPosts(slug, settings?.postsCount || 4);
       if (categoryPosts.length === 0) return null;
       return (
         <CategoryCardRenderer

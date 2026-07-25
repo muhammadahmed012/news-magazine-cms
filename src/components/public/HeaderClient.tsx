@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Menu, X, LogOut, Settings } from "lucide-react";
 import { signOut } from "next-auth/react";
 
@@ -45,17 +45,23 @@ export default function HeaderClient({
   socialLinks,
   session,
 }: HeaderClientProps) {
-  const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   const pathname = usePathname();
-  const router = useRouter();
 
   useEffect(() => {
     if (!sticky) return;
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", handleScroll);
+    const header = document.getElementById("site-header");
+    if (!header) return;
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        header.classList.add("header-scrolled");
+      } else {
+        header.classList.remove("header-scrolled");
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [sticky]);
 
@@ -66,17 +72,16 @@ export default function HeaderClient({
 
   return (
     <>
-      <header
-        className={`w-full z-40 transition-all duration-300 ${
-          sticky ? "sticky top-0" : "relative"
-        } ${
-          isScrolled
-            ? "bg-white/95 backdrop-blur-md shadow-sm border-b border-border-subtle py-2.5"
-            : transparent
-            ? "bg-transparent py-4 text-white"
-            : "bg-white border-b border-border-subtle py-4"
-        }`}
-      >
+    <header
+      id="site-header"
+      className={`w-full z-40 transition-all duration-300 ${
+        sticky ? "sticky top-0" : "relative"
+      } ${
+        transparent
+          ? "bg-transparent py-4 text-white"
+          : "bg-white border-b border-border-subtle py-4"
+      }`}
+    >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           {/* Logo */}
           <div className={`flex items-center ${logoPosition === "center" ? "order-2" : "order-1"}`}>

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Megaphone, Plus, Trash2, Link as LinkIcon, BarChart3, Save } from "lucide-react";
+import { Megaphone, Plus, Trash2, Link as LinkIcon, BarChart3 } from "lucide-react";
 
 interface Ad {
   id: string;
