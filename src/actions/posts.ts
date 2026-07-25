@@ -1,7 +1,9 @@
 // src/actions/posts.ts
 "use server";
 
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, users, categories, postTags, tags } from "@/lib/schema";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 export interface GetPostsParams {
   categorySlug?: string;
@@ -27,59 +29,73 @@ export async function getPosts(params: GetPostsParams = {}) {
   } = params;
 
   try {
-    const whereClause: any = {
-      status: "PUBLISHED",
-    };
+    const conditions: any[] = [eq(posts.status, "PUBLISHED")];
 
     if (categorySlug) {
-      whereClause.category = {
-        OR: [
-          { slug: categorySlug },
-          { parent: { slug: categorySlug } }
-        ]
-      };
+      conditions.push(eq(categories.slug, categorySlug));
     }
+    if (isFeatured !== undefined) conditions.push(eq(posts.isFeatured, isFeatured));
+    if (isBreaking !== undefined) conditions.push(eq(posts.isBreaking, isBreaking));
+    if (isEditorPick !== undefined) conditions.push(eq(posts.isEditorPick, isEditorPick));
+    if (isTrending !== undefined) conditions.push(eq(posts.isTrending, isTrending));
+    if (isSponsored !== undefined) conditions.push(eq(posts.isSponsored, isSponsored));
 
-    if (isFeatured !== undefined) whereClause.isFeatured = isFeatured;
-    if (isBreaking !== undefined) whereClause.isBreaking = isBreaking;
-    if (isEditorPick !== undefined) whereClause.isEditorPick = isEditorPick;
-    if (isTrending !== undefined) whereClause.isTrending = isTrending;
-    if (isSponsored !== undefined) whereClause.isSponsored = isSponsored;
-
-    const posts = await prisma.post.findMany({
-      where: whereClause,
-      include: {
+    const postsResult = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        subtitle: posts.subtitle,
+        slug: posts.slug,
+        content: posts.content,
+        excerpt: posts.excerpt,
+        featuredImage: posts.featuredImage,
+        status: posts.status,
+        publishedAt: posts.publishedAt,
+        readingTime: posts.readingTime,
+        viewCount: posts.viewCount,
+        isFeatured: posts.isFeatured,
+        isBreaking: posts.isBreaking,
+        isEditorPick: posts.isEditorPick,
+        isTrending: posts.isTrending,
+        isSponsored: posts.isSponsored,
+        isSticky: posts.isSticky,
+        createdAt: posts.createdAt,
+        updatedAt: posts.updatedAt,
+        authorId: posts.authorId,
+        categoryId: posts.categoryId,
         author: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            title: true,
-          },
+          id: users.id,
+          name: users.name,
+          image: users.image,
+          title: users.title,
         },
         category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            color: true,
-          },
+          id: categories.id,
+          name: categories.name,
+          slug: categories.slug,
+          color: categories.color,
         },
-        tags: {
-          select: {
-            name: true,
-            slug: true,
-          },
-        },
-      },
-      orderBy: {
-        publishedAt: "desc",
-      },
-      take: limit,
-      skip: offset,
-    });
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(and(...conditions))
+      .orderBy(desc(posts.publishedAt))
+      .limit(limit)
+      .offset(offset);
 
-    return { posts, success: true };
+    const postsWithTags = await Promise.all(
+      postsResult.map(async (post) => {
+        const postTagsResult = await db
+          .select({ name: tags.name, slug: tags.slug })
+          .from(postTags)
+          .innerJoin(tags, eq(postTags.tagId, tags.id))
+          .where(eq(postTags.postId, post.id));
+        return { ...post, tags: postTagsResult };
+      })
+    );
+
+    return { posts: postsWithTags, success: true };
   } catch (error) {
     console.error("Error fetching posts:", error);
     return { posts: [], success: false };
@@ -88,14 +104,10 @@ export async function getPosts(params: GetPostsParams = {}) {
 
 export async function incrementPostViews(postId: string) {
   try {
-    await prisma.post.update({
-      where: { id: postId },
-      data: {
-        viewCount: {
-          increment: 1,
-        },
-      },
-    });
+    await db
+      .update(posts)
+      .set({ viewCount: sql`${posts.viewCount} + 1` })
+      .where(eq(posts.id, postId));
     return { success: true };
   } catch (error) {
     console.error("Error incrementing post views:", error);

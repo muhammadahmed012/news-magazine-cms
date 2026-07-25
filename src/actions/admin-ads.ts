@@ -1,8 +1,10 @@
 // src/actions/admin-ads.ts
 "use server";
 
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { ads } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
 
 export interface AdInput {
   id?: string;
@@ -32,14 +34,9 @@ export async function upsertAd(data: AdInput) {
     };
 
     if (data.id) {
-      await prisma.ad.update({
-        where: { id: data.id },
-        data: adData,
-      });
+      await db.update(ads).set(adData).where(eq(ads.id, data.id));
     } else {
-      await prisma.ad.create({
-        data: adData,
-      });
+      await db.insert(ads).values(adData);
     }
 
     revalidatePath("/");
@@ -54,7 +51,7 @@ export async function upsertAd(data: AdInput) {
 
 export async function deleteAd(id: string) {
   try {
-    await prisma.ad.delete({ where: { id } });
+    await db.delete(ads).where(eq(ads.id, id));
     revalidatePath("/");
     revalidatePath("/admin/ads");
     return { success: true };

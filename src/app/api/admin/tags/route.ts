@@ -1,14 +1,24 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { tags, postTags } from "@/lib/schema";
 import { auth } from "@/lib/auth";
+import { eq, desc, asc, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
-    const tags = await prisma.tag.findMany({
-      orderBy: { name: "asc" },
-      include: { _count: { select: { posts: true } } },
-    });
-    return NextResponse.json({ tags });
+    const tagsResult = await db
+      .select({
+        id: tags.id,
+        name: tags.name,
+        slug: tags.slug,
+        createdAt: tags.createdAt,
+        postCount: sql<number>`count(${postTags.postId})::int`,
+      })
+      .from(tags)
+      .leftJoin(postTags, eq(tags.id, postTags.tagId))
+      .groupBy(tags.id, tags.name, tags.slug, tags.createdAt)
+      .orderBy(asc(tags.name));
+    return NextResponse.json({ tags: tagsResult });
   } catch (err) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
@@ -24,7 +34,7 @@ export async function POST(req: Request) {
     if (body._action === "delete") {
       const { id } = body;
       if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
-      await prisma.tag.delete({ where: { id } });
+      await db.delete(tags).where(eq(tags.id, id));
       return NextResponse.json({ success: true });
     }
 
@@ -40,16 +50,14 @@ export async function POST(req: Request) {
       .replace(/-+/g, "-")
       .trim();
 
-    const existing = await prisma.tag.findUnique({ where: { slug } });
-    if (existing) {
+    const existing = await db.select().from(tags).where(eq(tags.slug, slug)).limit(1);
+    if (existing.length > 0) {
       return NextResponse.json({ error: "Tag already exists" }, { status: 400 });
     }
 
-    const tag = await prisma.tag.create({
-      data: { name: name.trim(), slug },
-    });
+    const result = await db.insert(tags).values({ name: name.trim(), slug }).returning();
 
-    return NextResponse.json({ success: true, tag });
+    return NextResponse.json({ success: true, tag: result[0] });
   } catch (err) {
     console.error("POST /api/admin/tags error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -1,12 +1,12 @@
 // src/app/api/admin/media/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { media } from "@/lib/schema";
+import { desc, eq } from "drizzle-orm";
 
 export async function GET() {
   try {
-    const items = await prisma.media.findMany({
-      orderBy: { createdAt: "desc" },
-    });
+    const items = await db.select().from(media).orderBy(desc(media.createdAt));
     return NextResponse.json({ items, success: true });
   } catch (error) {
     console.error("Error fetching media:", error);
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     if (body._action === "delete" && body.id) {
-      await prisma.media.delete({ where: { id: body.id } });
+      await db.delete(media).where(eq(media.id, body.id));
       return NextResponse.json({ success: true });
     }
 

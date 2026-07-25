@@ -1,5 +1,7 @@
 // src/app/sitemap.xml/route.ts
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, pages as pagesTable, categories, settings } from "@/lib/schema";
+import { eq, desc, asc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -10,8 +12,8 @@ export async function GET() {
 
   try {
     const [sitemapSetting, indexingSetting] = await Promise.all([
-      prisma.setting.findUnique({ where: { key: "sitemap_settings" } }),
-      prisma.setting.findUnique({ where: { key: "indexing_settings" } }),
+      db.select().from(settings).where(eq(settings.key, "sitemap_settings")).then((r) => r[0]),
+      db.select().from(settings).where(eq(settings.key, "indexing_settings")).then((r) => r[0]),
     ]);
 
     if (sitemapSetting) {
@@ -39,14 +41,20 @@ export async function GET() {
 
     try {
       if (sitemapConfig.posts) {
-        const posts = await prisma.post.findMany({
-          where: { status: "PUBLISHED" },
-          select: { slug: true, updatedAt: true, category: { select: { slug: true } } },
-          orderBy: { publishedAt: "desc" },
-        });
-        for (const post of posts) {
+        const postsResult = await db
+          .select({
+            slug: posts.slug,
+            updatedAt: posts.updatedAt,
+            categorySlug: categories.slug,
+          })
+          .from(posts)
+          .innerJoin(categories, eq(posts.categoryId, categories.id))
+          .where(eq(posts.status, "PUBLISHED"))
+          .orderBy(desc(posts.publishedAt));
+
+        for (const post of postsResult) {
           entries.push(`  <url>
-    <loc>${siteUrl}/${post.category.slug}/${post.slug}</loc>
+    <loc>${siteUrl}/${post.categorySlug}/${post.slug}</loc>
     <lastmod>${post.updatedAt.toISOString()}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -55,12 +63,13 @@ export async function GET() {
       }
 
       if (sitemapConfig.pages) {
-        const pages = await prisma.page.findMany({
-          where: { status: "PUBLISHED" },
-          select: { slug: true, updatedAt: true },
-          orderBy: { updatedAt: "desc" },
-        });
-        for (const page of pages) {
+        const pagesResult = await db
+          .select({ slug: pagesTable.slug, updatedAt: pagesTable.updatedAt })
+          .from(pagesTable)
+          .where(eq(pagesTable.status, "PUBLISHED"))
+          .orderBy(desc(pagesTable.updatedAt));
+
+        for (const page of pagesResult) {
           entries.push(`  <url>
     <loc>${siteUrl}/${page.slug}</loc>
     <lastmod>${page.updatedAt.toISOString()}</lastmod>
@@ -71,11 +80,12 @@ export async function GET() {
       }
 
       if (sitemapConfig.categories) {
-        const categories = await prisma.category.findMany({
-          select: { slug: true, updatedAt: true },
-          orderBy: { name: "asc" },
-        });
-        for (const cat of categories) {
+        const categoriesResult = await db
+          .select({ slug: categories.slug, updatedAt: categories.updatedAt })
+          .from(categories)
+          .orderBy(asc(categories.name));
+
+        for (const cat of categoriesResult) {
           entries.push(`  <url>
     <loc>${siteUrl}/${cat.slug}</loc>
     <lastmod>${cat.updatedAt.toISOString()}</lastmod>

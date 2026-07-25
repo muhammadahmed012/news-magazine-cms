@@ -1,8 +1,10 @@
 // src/actions/admin-posts.ts
 "use server";
 
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, categories, postTags, revisions } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
+import { eq, sql } from "drizzle-orm";
 
 export interface PostInput {
   id?: string;
@@ -62,53 +64,71 @@ export async function upsertPost(data: PostInput) {
 
     let post;
     if (data.id) {
-      // 1. Fetch old post for revision logic
-      const oldPost = await prisma.post.findUnique({
-        where: { id: data.id }
-      });
+      const oldPost = await db.select().from(posts).where(eq(posts.id, data.id)).then((r) => r[0]);
 
-      // 2. Perform Update
-      post = await prisma.post.update({
-        where: { id: data.id },
-        data: {
-          ...postData,
-          ...(data.tagIds ? { tags: { set: data.tagIds.map(id => ({ id })) } } : {}),
-        },
-        include: { category: true }
-      });
+      post = await db.update(posts).set(postData).where(eq(posts.id, data.id)).returning();
 
-      // 3. Save a revision if content changed
+      if (data.tagIds) {
+        await db.delete(postTags).where(eq(postTags.postId, data.id!));
+        if (data.tagIds.length > 0) {
+          await db.insert(postTags).values(
+            data.tagIds.map((tagId) => ({ postId: data.id!, tagId }))
+          );
+        }
+      }
+
+      const updatedPost = post[0];
+
       if (oldPost && (oldPost.content !== data.content || oldPost.title !== data.title)) {
-        await prisma.revision.create({
-          data: {
-            postId: post.id,
-            title: oldPost.title,
-            content: oldPost.content,
-            excerpt: oldPost.excerpt
-          }
+        await db.insert(revisions).values({
+          postId: updatedPost.id,
+          title: oldPost.title,
+          content: oldPost.content,
+          excerpt: oldPost.excerpt,
         });
       }
+
+      const categoryResult = await db
+        .select({ slug: categories.slug })
+        .from(categories)
+        .where(eq(categories.id, updatedPost.categoryId))
+        .limit(1);
+      const categorySlug = categoryResult[0]?.slug || "";
+
+      revalidatePath("/");
+      revalidatePath(`/${categorySlug}`);
+      revalidatePath(`/${categorySlug}/${updatedPost.slug}`);
+      revalidatePath("/admin/posts");
+
+      return { success: true, post: updatedPost };
     } else {
-      // Perform Create
-      post = await prisma.post.create({
-        data: {
-          ...postData,
-          ...(data.tagIds && data.tagIds.length > 0 ? { tags: { connect: data.tagIds.map(id => ({ id })) } } : {}),
-        },
-        include: { category: true }
-      });
+      const newPost = await db.insert(posts).values(postData).returning();
+
+      if (data.tagIds && data.tagIds.length > 0) {
+        await db.insert(postTags).values(
+          data.tagIds.map((tagId) => ({ postId: newPost[0].id, tagId }))
+        );
+      }
+
+      const insertedPost = newPost[0];
+
+      const categoryResult = await db
+        .select({ slug: categories.slug })
+        .from(categories)
+        .where(eq(categories.id, insertedPost.categoryId))
+        .limit(1);
+      const categorySlug = categoryResult[0]?.slug || "";
+
+      revalidatePath("/");
+      revalidatePath(`/${categorySlug}`);
+      revalidatePath(`/${categorySlug}/${insertedPost.slug}`);
+      revalidatePath("/admin/posts");
+
+      return { success: true, post: insertedPost };
     }
-
-    // Revalidate public page paths to ensure readers see changes
-    revalidatePath("/");
-    revalidatePath(`/${post.category.slug}`);
-    revalidatePath(`/${post.category.slug}/${post.slug}`);
-    revalidatePath("/admin/posts");
-
-    return { success: true, post };
   } catch (error: any) {
     console.error("Error saving post:", error);
-    if (error.code === "P2002") {
+    if (error?.code === "23505") {
       return { success: false, error: "The slug matches another existing post. Slugs must be unique." };
     }
     return { success: false, error: "Failed to save post." };
@@ -117,13 +137,25 @@ export async function upsertPost(data: PostInput) {
 
 export async function deletePost(id: string) {
   try {
-    const post = await prisma.post.delete({
-      where: { id },
-      include: { category: true }
-    });
+    const postResult = await db
+      .delete(posts)
+      .where(eq(posts.id, id))
+      .returning();
+
+    const deletedPost = postResult[0];
+    if (!deletedPost) {
+      return { success: false, error: "Post not found." };
+    }
+
+    const categoryResult = await db
+      .select({ slug: categories.slug })
+      .from(categories)
+      .where(eq(categories.id, deletedPost.categoryId))
+      .limit(1);
+    const categorySlug = categoryResult[0]?.slug || "";
 
     revalidatePath("/");
-    revalidatePath(`/${post.category.slug}`);
+    revalidatePath(`/${categorySlug}`);
     revalidatePath("/admin/posts");
 
     return { success: true };

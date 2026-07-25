@@ -1,5 +1,8 @@
 // src/app/(admin)/admin/categories/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { categories, posts } from "@/lib/schema";
+import { eq, asc, sql, isNotNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { revalidatePath } from "next/cache";
 import CategoryEditor from "@/components/admin/CategoryEditor";
 import TagsManager from "@/components/admin/TagsManager";
@@ -7,13 +10,60 @@ import TagsManager from "@/components/admin/TagsManager";
 export const dynamic = "force-dynamic";
 
 export default async function AdminCategoriesPage() {
-  const categories = await prisma.category.findMany({
-    orderBy: [{ order: "asc" }, { name: "asc" }],
-    include: {
-      parent: { select: { name: true } },
-      _count: { select: { posts: true, children: true } },
+  const parentCat = alias(categories, "parentCategory");
+
+  const categoryRows = await db
+    .select({
+      id: categories.id,
+      name: categories.name,
+      slug: categories.slug,
+      description: categories.description,
+      longDescription: categories.longDescription,
+      icon: categories.icon,
+      image: categories.image,
+      color: categories.color,
+      layoutStyle: categories.layoutStyle,
+      order: categories.order,
+      seoTitle: categories.seoTitle,
+      seoDescription: categories.seoDescription,
+      parentId: categories.parentId,
+      createdAt: categories.createdAt,
+      updatedAt: categories.updatedAt,
+      parentName: parentCat.name,
+    })
+    .from(categories)
+    .leftJoin(parentCat, eq(categories.parentId, parentCat.id))
+    .orderBy(asc(categories.order), asc(categories.name));
+
+  const [postCountRows, childCountRows] = await Promise.all([
+    db
+      .select({
+        categoryId: posts.categoryId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(posts)
+      .groupBy(posts.categoryId),
+    db
+      .select({
+        parentId: categories.parentId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(categories)
+      .where(isNotNull(categories.parentId))
+      .groupBy(categories.parentId),
+  ]);
+
+  const postCountMap = new Map(postCountRows.map((r) => [r.categoryId, r.count]));
+  const childCountMap = new Map(childCountRows.map((r) => [r.parentId, r.count]));
+
+  const categoryList = categoryRows.map((row) => ({
+    ...row,
+    parent: row.parentName ? { name: row.parentName } : null,
+    _count: {
+      posts: postCountMap.get(row.id) || 0,
+      children: childCountMap.get(row.id) || 0,
     },
-  });
+  }));
 
   const handleCreateCategory = async (data: {
     name: string;
@@ -36,17 +86,15 @@ export default async function AdminCategoriesPage() {
       .trim();
 
     try {
-      await prisma.category.create({
-        data: {
-          name,
-          slug,
-          description: description || null,
-          longDescription: longDescription || null,
-          parentId: parentId || null,
-          icon: icon || null,
-          color: color || null,
-          layoutStyle: layoutStyle || "grid",
-        },
+      await db.insert(categories).values({
+        name,
+        slug,
+        description: description || null,
+        longDescription: longDescription || null,
+        parentId: parentId || null,
+        icon: icon || null,
+        color: color || null,
+        layoutStyle: layoutStyle || "grid",
       });
       revalidatePath("/admin/categories");
       revalidatePath("/");
@@ -77,19 +125,16 @@ export default async function AdminCategoriesPage() {
       .trim();
 
     try {
-      await prisma.category.update({
-        where: { id },
-        data: {
-          name,
-          slug,
-          description: description || null,
-          longDescription: longDescription || null,
-          parentId: parentId || null,
-          icon: icon || null,
-          color: color || null,
-          layoutStyle: layoutStyle || "grid",
-        },
-      });
+      await db.update(categories).set({
+        name,
+        slug,
+        description: description || null,
+        longDescription: longDescription || null,
+        parentId: parentId || null,
+        icon: icon || null,
+        color: color || null,
+        layoutStyle: layoutStyle || "grid",
+      }).where(eq(categories.id, id));
       revalidatePath("/admin/categories");
       revalidatePath("/");
     } catch (e) {
@@ -101,7 +146,7 @@ export default async function AdminCategoriesPage() {
     "use server";
     if (!id) return;
     try {
-      await prisma.category.delete({ where: { id } });
+      await db.delete(categories).where(eq(categories.id, id));
       revalidatePath("/admin/categories");
       revalidatePath("/");
     } catch (e) {
@@ -121,7 +166,7 @@ export default async function AdminCategoriesPage() {
       </div>
 
       <CategoryEditor
-        categories={categories as any}
+        categories={categoryList as any}
         onCreateCategory={handleCreateCategory}
         onUpdateCategory={handleUpdateCategory}
         onDeleteCategory={handleDeleteCategory}

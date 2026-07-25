@@ -1,6 +1,9 @@
 // src/app/(public)/[slug]/page.tsx
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { categories, pages, posts, users } from "@/lib/schema";
+import { eq, desc, and, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { getPosts } from "@/actions/posts";
 import Link from "next/link";
 import { Calendar, ChevronLeft, ChevronRight } from "lucide-react";
@@ -13,9 +16,12 @@ export const dynamicParams = true;
 
 export async function generateStaticParams() {
   try {
-    const categories = await prisma.category.findMany({ select: { slug: true } });
-    const pages = await prisma.page.findMany({ where: { status: "PUBLISHED" }, select: { slug: true } });
-    return [...categories, ...pages].map((item) => ({ slug: item.slug }));
+    const categoryRows = await db.select({ slug: categories.slug }).from(categories);
+    const pageRows = await db
+      .select({ slug: pages.slug })
+      .from(pages)
+      .where(eq(pages.status, "PUBLISHED"));
+    return [...categoryRows, ...pageRows].map((item) => ({ slug: item.slug }));
   } catch (error) {
     console.error("[SSG] Failed to generate slug params:", error);
     return [];
@@ -37,23 +43,29 @@ export async function generateMetadata({ params }: SlugPageProps): Promise<Metad
   const resolvedParams = await params;
   const slug = resolvedParams.slug;
 
-  const category = await prisma.category.findUnique({ where: { slug } });
-  if (category) {
+  const [categoryRow] = await db
+    .select()
+    .from(categories)
+    .where(eq(categories.slug, slug))
+    .limit(1);
+  if (categoryRow) {
     return {
-      title: category.seoTitle || category.name,
-      description: category.seoDescription || category.description || undefined,
+      title: categoryRow.seoTitle || categoryRow.name,
+      description: categoryRow.seoDescription || categoryRow.description || undefined,
     };
   }
 
-  const page = await prisma.page.findUnique({
-    where: { slug, status: "PUBLISHED" },
-  });
-  if (page) {
+  const [pageRow] = await db
+    .select()
+    .from(pages)
+    .where(and(eq(pages.slug, slug), eq(pages.status, "PUBLISHED")))
+    .limit(1);
+  if (pageRow) {
     return {
-      title: page.seoTitle || page.title,
-      description: page.seoDescription || page.excerpt || undefined,
-      alternates: page.canonicalUrl ? { canonical: page.canonicalUrl } : undefined,
-      robots: page.robotsMeta || undefined,
+      title: pageRow.seoTitle || pageRow.title,
+      description: pageRow.seoDescription || pageRow.excerpt || undefined,
+      alternates: pageRow.canonicalUrl ? { canonical: pageRow.canonicalUrl } : undefined,
+      robots: pageRow.robotsMeta || undefined,
     };
   }
 
@@ -66,15 +78,36 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
   const slug = resolvedParams.slug;
   const currentPage = Math.max(1, Number(resolvedSearchParams.page) || 1);
 
+  const categoriesParent = alias(categories, "parentCategory");
+
   let category: (any & { children: any[]; parent: any | null }) | null = null;
   try {
-    category = await prisma.category.findUnique({
-      where: { slug: slug },
-      include: {
-        children: true,
-        parent: true,
-      },
-    });
+    const [categoryRow] = await db
+      .select()
+      .from(categories)
+      .where(eq(categories.slug, slug))
+      .limit(1);
+
+    if (categoryRow) {
+      const parentRow = categoryRow.parentId
+        ? await db
+            .select()
+            .from(categories)
+            .where(eq(categories.id, categoryRow.parentId))
+            .limit(1)
+            .then((r) => r[0] ?? null)
+        : null;
+      const childrenRows = await db
+        .select()
+        .from(categories)
+        .where(eq(categories.parentId, categoryRow.id));
+
+      category = {
+        ...categoryRow,
+        parent: parentRow,
+        children: childrenRows,
+      };
+    }
   } catch (error) {
     console.error("[SlugPage] Failed to fetch category:", error);
   }
@@ -82,22 +115,26 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
   if (category) {
     const offset = (currentPage - 1) * POSTS_PER_PAGE;
 
-    const { posts } = await getPosts({ categorySlug: slug, limit: POSTS_PER_PAGE, offset });
+    const { posts: postList } = await getPosts({ categorySlug: slug, limit: POSTS_PER_PAGE, offset });
     const layout = category.layoutStyle || "grid";
 
     let totalCount = 0;
     try {
-      totalCount = await prisma.post.count({
-        where: {
-          status: "PUBLISHED",
-          category: {
-            OR: [
-              { slug: slug },
-              { parent: { slug: slug } }
-            ]
-          }
-        }
-      });
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(posts)
+        .innerJoin(categories, eq(posts.categoryId, categories.id))
+        .leftJoin(categoriesParent, eq(categories.parentId, categoriesParent.id))
+        .where(
+          and(
+            eq(posts.status, "PUBLISHED"),
+            or(
+              eq(categories.slug, slug),
+              eq(categoriesParent.slug, slug)
+            )
+          )
+        );
+      totalCount = countResult?.count ?? 0;
     } catch (error) {
       console.error("[SlugPage] Failed to count posts:", error);
     }
@@ -150,7 +187,7 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
 
         {/* Content Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {posts.map((post) => (
+          {postList.map((post) => (
             <article key={post.id} className="flex flex-col group">
               <Link href={`/${slug}/${post.slug}`} className="block overflow-hidden mb-4 relative aspect-[3/2] bg-gray-100 rounded-sm">
                 {post.featuredImage && (
@@ -192,14 +229,14 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
             </article>
           ))}
 
-          {posts.length === 0 && (
+          {postList.length === 0 && (
             <div className="col-span-full py-20 text-center flex flex-col items-center">
               <div className="w-16 h-16 bg-bg-light rounded-full flex items-center justify-center mb-4 border border-border-subtle">
                 <Calendar className="w-6 h-6 text-gray-400" />
               </div>
               <h3 className="text-lg font-bold text-text-primary">No articles found</h3>
               <p className="text-sm text-gray-500 mt-1 max-w-md">
-                We're currently working on bringing you fresh content for this topic. Check back soon.
+                We are currently working on bringing you fresh content for this topic. Check back soon.
               </p>
             </div>
           )}
@@ -261,10 +298,60 @@ export default async function SlugPage({ params, searchParams }: SlugPageProps) 
   // 2. Try to find a page if category is not found
   let page: any = null;
   try {
-    page = await prisma.page.findUnique({
-      where: { slug: slug, status: "PUBLISHED" },
-      include: { author: { select: { name: true, title: true, image: true } } },
-    });
+    const [pageRow] = await db
+      .select({
+        id: pages.id,
+        title: pages.title,
+        slug: pages.slug,
+        content: pages.content,
+        excerpt: pages.excerpt,
+        featuredImage: pages.featuredImage,
+        status: pages.status,
+        seoTitle: pages.seoTitle,
+        seoDescription: pages.seoDescription,
+        focusKeywords: pages.focusKeywords,
+        canonicalUrl: pages.canonicalUrl,
+        robotsMeta: pages.robotsMeta,
+        schemaType: pages.schemaType,
+        structuredData: pages.structuredData,
+        createdAt: pages.createdAt,
+        updatedAt: pages.updatedAt,
+        authorId: pages.authorId,
+        authorName: users.name,
+        authorTitle: users.title,
+        authorImage: users.image,
+      })
+      .from(pages)
+      .innerJoin(users, eq(pages.authorId, users.id))
+      .where(and(eq(pages.slug, slug), eq(pages.status, "PUBLISHED")))
+      .limit(1);
+
+    if (pageRow) {
+      page = {
+        id: pageRow.id,
+        title: pageRow.title,
+        slug: pageRow.slug,
+        content: pageRow.content,
+        excerpt: pageRow.excerpt,
+        featuredImage: pageRow.featuredImage,
+        status: pageRow.status,
+        seoTitle: pageRow.seoTitle,
+        seoDescription: pageRow.seoDescription,
+        focusKeywords: pageRow.focusKeywords,
+        canonicalUrl: pageRow.canonicalUrl,
+        robotsMeta: pageRow.robotsMeta,
+        schemaType: pageRow.schemaType,
+        structuredData: pageRow.structuredData,
+        createdAt: pageRow.createdAt,
+        updatedAt: pageRow.updatedAt,
+        authorId: pageRow.authorId,
+        author: {
+          name: pageRow.authorName,
+          title: pageRow.authorTitle,
+          image: pageRow.authorImage,
+        },
+      };
+    }
   } catch (error) {
     console.error("[SlugPage] Failed to fetch page:", error);
   }

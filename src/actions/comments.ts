@@ -1,8 +1,10 @@
 // src/actions/comments.ts
 "use server";
 
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { comments, posts, categories } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
 
 export interface CreateCommentParams {
   postId: string;
@@ -21,30 +23,30 @@ export async function createComment(params: CreateCommentParams) {
   }
 
   try {
-    // If authorId is passed, connect to User, else save as guest
-    const comment = await prisma.comment.create({
-      data: {
-        content: content.trim(),
-        postId,
-        parentId,
-        status: "APPROVED", // Auto approve for demo, can be toggled by mod
-        authorId: authorId || undefined,
-        guestName: authorId ? undefined : guestName || "Anonymous",
-        guestEmail: authorId ? undefined : guestEmail || "guest@example.com",
-      },
-    });
+    const comment = await db.insert(comments).values({
+      content: content.trim(),
+      postId,
+      parentId: parentId || null,
+      status: "APPROVED",
+      authorId: authorId || null,
+      guestName: authorId ? null : guestName || "Anonymous",
+      guestEmail: authorId ? null : guestEmail || "guest@example.com",
+    }).returning();
 
-    // Revalidate the post page path to show the new comment instantly
-    const post = await prisma.post.findUnique({
-      where: { id: postId },
-      select: { slug: true, category: { select: { slug: true } } },
-    });
+    const postResult = await db
+      .select({ slug: posts.slug, categorySlug: categories.slug })
+      .from(posts)
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(eq(posts.id, postId))
+      .limit(1);
+
+    const post = postResult[0];
 
     if (post) {
-      revalidatePath(`/${post.category.slug}/${post.slug}`);
+      revalidatePath(`/${post.categorySlug}/${post.slug}`);
     }
 
-    return { success: true, comment };
+    return { success: true, comment: comment[0] };
   } catch (error) {
     console.error("Error creating comment:", error);
     return { success: false, error: "Failed to submit comment." };

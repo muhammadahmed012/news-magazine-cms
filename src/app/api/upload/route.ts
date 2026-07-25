@@ -1,6 +1,7 @@
 // src/app/api/upload/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { media } from "@/lib/schema";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 
@@ -16,7 +17,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // Validate file type
     const allowedTypes = [
       "image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/svg+xml",
       "video/mp4", "video/webm",
@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File type not allowed" }, { status: 400 });
     }
 
-    // 10MB limit
     if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ error: "File too large (max 10MB)" }, { status: 400 });
     }
@@ -35,7 +34,6 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Generate unique filename
     const ext = file.name.split(".").pop() || "bin";
     const timestamp = Date.now();
     const safeName = file.name
@@ -44,7 +42,6 @@ export async function POST(request: NextRequest) {
       .toLowerCase();
     const uniqueName = `${timestamp}-${safeName}`;
 
-    // Ensure upload directory exists
     const uploadDir = join(process.cwd(), "public", "uploads", folderPath);
     await mkdir(uploadDir, { recursive: true });
 
@@ -53,23 +50,20 @@ export async function POST(request: NextRequest) {
 
     const fileUrl = `/uploads/${folderPath}${uniqueName}`.replace(/\/+/g, "/");
 
-    // Save to media library
-    const mediaItem = await prisma.media.create({
-      data: {
-        fileName: file.name,
-        fileUrl,
-        fileSize: file.size,
-        mimeType: file.type,
-        altText: altText || null,
-        caption: caption || null,
-        folderPath: `/${folderPath}`.replace(/\/+/g, "/"),
-      },
-    });
+    const mediaItem = await db.insert(media).values({
+      fileName: file.name,
+      fileUrl,
+      fileSize: file.size,
+      mimeType: file.type,
+      altText: altText || null,
+      caption: caption || null,
+      folderPath: `/${folderPath}`.replace(/\/+/g, "/"),
+    }).returning();
 
     return NextResponse.json({
       success: true,
       url: fileUrl,
-      media: mediaItem,
+      media: mediaItem[0],
     });
   } catch (error) {
     console.error("Upload error:", error);

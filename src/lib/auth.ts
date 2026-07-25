@@ -1,7 +1,9 @@
 // src/lib/auth.ts
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { users } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { type JWT } from "next-auth/jwt";
 
@@ -40,9 +42,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string }
-        });
+        const result = await db
+          .select()
+          .from(users)
+          .where(eq(users.email, credentials.email as string))
+          .limit(1);
+
+        const user = result[0];
 
         if (!user || !user.passwordHash) {
           return null;
@@ -81,7 +87,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (session.user && token) {
         session.user.role = token.role as string | undefined;
         session.user.title = token.title as string | undefined;
-        // Assign the token userId to the user object safely
         (session.user as any).id = token.userId;
       }
       return session;
@@ -92,7 +97,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 30 * 24 * 60 * 60,
   },
   secret: process.env.AUTH_SECRET || "super-secret-auth-key-change-in-production-12345",
 });

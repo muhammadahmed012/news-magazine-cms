@@ -42,7 +42,7 @@ export default function LatestNews({
     try {
       const response = await getPosts({ limit, offset });
       if (response.success && response.posts.length > 0) {
-        // Cast or adapt standard Prisma output to Post type safely
+        // Cast or adapt standard query output to Post type safely
         const newPosts = response.posts as unknown as Post[];
         setPosts((prev) => [...prev, ...newPosts]);
         setOffset((prev) => prev + limit);

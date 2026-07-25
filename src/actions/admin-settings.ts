@@ -1,18 +1,21 @@
 // src/actions/admin-settings.ts
 "use server";
 
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { settings } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function saveSetting(key: string, value: string) {
   try {
-    await prisma.setting.upsert({
-      where: { key },
-      create: { key, value },
-      update: { value },
-    });
+    const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
 
-    // Revalidate paths that consume settings
+    if (existing.length > 0) {
+      await db.update(settings).set({ value, updatedAt: new Date() }).where(eq(settings.key, key));
+    } else {
+      await db.insert(settings).values({ key, value });
+    }
+
     revalidatePath("/");
     revalidatePath("/admin/theme");
     revalidatePath("/admin/homepage");

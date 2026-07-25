@@ -1,6 +1,8 @@
 // src/app/(public)/tag/[tagSlug]/page.tsx
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { tags, posts, users, categories, postTags } from "@/lib/schema";
+import { eq, desc, and, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
 import { Clock, Tag } from "lucide-react";
 import OptimizedImage from "@/components/public/OptimizedImage";
@@ -10,10 +12,8 @@ export const dynamicParams = true;
 
 export async function generateStaticParams() {
   try {
-    const tags = await prisma.tag.findMany({
-      select: { slug: true },
-    });
-    return tags.map((tag) => ({ tagSlug: tag.slug }));
+    const tagRows = await db.select({ slug: tags.slug }).from(tags);
+    return tagRows.map((tag) => ({ tagSlug: tag.slug }));
   } catch (error) {
     console.error("[SSG] Failed to generate tag params:", error);
     return [];
@@ -31,9 +31,12 @@ export default async function TagPage({ params }: TagPageProps) {
 
   let tag: any = null;
   try {
-    tag = await prisma.tag.findUnique({
-      where: { slug: tagSlug },
-    });
+    const [tagRow] = await db
+      .select()
+      .from(tags)
+      .where(eq(tags.slug, tagSlug))
+      .limit(1);
+    tag = tagRow || null;
   } catch (error) {
     console.error("[TagPage] Failed to fetch tag:", error);
     notFound();
@@ -41,20 +44,29 @@ export default async function TagPage({ params }: TagPageProps) {
 
   if (!tag) notFound();
 
-  let posts: any[] = [];
+  let postList: any[] = [];
   try {
-    posts = await prisma.post.findMany({
-      where: {
-        status: "PUBLISHED",
-        tags: { some: { id: tag.id } },
-      },
-      orderBy: { publishedAt: "desc" },
-      take: 30,
-      include: {
-        author: { select: { name: true } },
-        category: { select: { name: true, slug: true, color: true } },
-      },
-    });
+    const rawPosts = await db
+      .select({
+        ...getTableColumns(posts),
+        authorName: users.name,
+        categoryName: categories.name,
+        categorySlug: categories.slug,
+        categoryColor: categories.color,
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .innerJoin(postTags, eq(posts.id, postTags.postId))
+      .where(and(eq(posts.status, "PUBLISHED"), eq(postTags.tagId, tag.id)))
+      .orderBy(desc(posts.publishedAt))
+      .limit(30);
+
+    postList = rawPosts.map((row) => ({
+      ...row,
+      author: { name: row.authorName },
+      category: { name: row.categoryName, slug: row.categorySlug, color: row.categoryColor },
+    }));
   } catch (error) {
     console.error("[TagPage] Failed to fetch posts:", error);
   }
@@ -75,13 +87,13 @@ export default async function TagPage({ params }: TagPageProps) {
           </h1>
         </div>
         <p className="mt-3 text-sm text-gray-400 font-semibold">
-          {posts.length} {posts.length === 1 ? "article" : "articles"} tagged with &ldquo;{tag.name}&rdquo;
+          {postList.length} {postList.length === 1 ? "article" : "articles"} tagged with &ldquo;{tag.name}&rdquo;
         </p>
       </div>
 
       {/* Posts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {posts.map((post) => (
+        {postList.map((post) => (
           <article key={post.id} className="flex flex-col group">
             <Link href={`/${post.category.slug}/${post.slug}`} className="block overflow-hidden mb-4 relative aspect-[3/2] bg-gray-100 rounded-sm">
               {post.featuredImage && (
@@ -124,7 +136,7 @@ export default async function TagPage({ params }: TagPageProps) {
           </article>
         ))}
 
-        {posts.length === 0 && (
+        {postList.length === 0 && (
           <div className="col-span-full py-20 text-center flex flex-col items-center">
             <Tag className="w-12 h-12 text-gray-300 mb-4" />
             <h3 className="text-lg font-bold text-text-primary">No articles with this tag</h3>

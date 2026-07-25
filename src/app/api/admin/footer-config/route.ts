@@ -1,23 +1,33 @@
 // src/app/api/admin/footer-config/route.ts
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { settings } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
 
 const SETTING_KEY = "footer_config";
 const GENERAL_KEY = "general_settings";
 
+async function upsertSetting(key: string, value: string) {
+  const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+  if (existing.length > 0) {
+    await db.update(settings).set({ value, updatedAt: new Date() }).where(eq(settings.key, key));
+  } else {
+    await db.insert(settings).values({ key, value });
+  }
+}
+
 export async function GET() {
   try {
     const [footerSetting, generalSetting] = await Promise.all([
-      prisma.setting.findUnique({ where: { key: SETTING_KEY } }),
-      prisma.setting.findUnique({ where: { key: GENERAL_KEY } }),
+      db.select().from(settings).where(eq(settings.key, SETTING_KEY)).then((r) => r[0]),
+      db.select().from(settings).where(eq(settings.key, GENERAL_KEY)).then((r) => r[0]),
     ]);
 
     const footerConfig = footerSetting ? JSON.parse(footerSetting.value) : {};
     const generalConfig = generalSetting ? JSON.parse(generalSetting.value) : {};
 
-    // Merge social links from general_settings
     const config = {
       ...footerConfig,
       socialLinks: {
@@ -42,21 +52,15 @@ export async function POST(req: Request) {
 
     const body = await req.json();
 
-    // 1. Save footer configuration (copyright, columns, newsletter)
     const footerData = {
       copyright: body.copyright,
       columns: body.columns,
       newsletter: body.newsletter,
     };
 
-    await prisma.setting.upsert({
-      where: { key: SETTING_KEY },
-      create: { key: SETTING_KEY, value: JSON.stringify(footerData) },
-      update: { value: JSON.stringify(footerData) },
-    });
+    await upsertSetting(SETTING_KEY, JSON.stringify(footerData));
 
-    // 2. Save social links to general_settings to keep it unified
-    const generalSetting = await prisma.setting.findUnique({ where: { key: GENERAL_KEY } });
+    const generalSetting = await db.select().from(settings).where(eq(settings.key, GENERAL_KEY)).then((r) => r[0]);
     const generalConfig = generalSetting ? JSON.parse(generalSetting.value) : {};
 
     const updatedGeneralConfig = {
@@ -66,11 +70,7 @@ export async function POST(req: Request) {
       linkedinUrl: body.socialLinks?.linkedin || "",
     };
 
-    await prisma.setting.upsert({
-      where: { key: GENERAL_KEY },
-      create: { key: GENERAL_KEY, value: JSON.stringify(updatedGeneralConfig) },
-      update: { value: JSON.stringify(updatedGeneralConfig) },
-    });
+    await upsertSetting(GENERAL_KEY, JSON.stringify(updatedGeneralConfig));
 
     revalidatePath("/");
     revalidatePath("/admin/footer");

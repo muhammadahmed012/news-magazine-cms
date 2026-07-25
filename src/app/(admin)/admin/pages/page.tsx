@@ -1,5 +1,7 @@
 // src/app/(admin)/admin/pages/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { pages, users } from "@/lib/schema";
+import { eq, desc, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
 import { Plus, Edit, Trash2, FileText } from "lucide-react";
 import DeletePageButton from "./DeletePageButton";
@@ -7,10 +9,19 @@ import DeletePageButton from "./DeletePageButton";
 export const dynamic = "force-dynamic";
 
 export default async function AdminPagesPage() {
-  const pages = await prisma.page.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { author: { select: { name: true } } },
-  });
+  const rawPages = await db
+    .select({
+      ...getTableColumns(pages),
+      authorName: users.name,
+    })
+    .from(pages)
+    .innerJoin(users, eq(pages.authorId, users.id))
+    .orderBy(desc(pages.createdAt));
+
+  const pageList = rawPages.map((row) => ({
+    ...row,
+    author: { name: row.authorName },
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,7 +53,7 @@ export default async function AdminPagesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
-              {pages.map((page) => (
+              {pageList.map((page) => (
                 <tr key={page.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -86,7 +97,7 @@ export default async function AdminPagesPage() {
                   </td>
                 </tr>
               ))}
-              {pages.length === 0 && (
+              {pageList.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-400 font-medium text-sm">
                     No pages found. Create your first page to get started.

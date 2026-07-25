@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },
-  serverExternalPackages: ["@prisma/client", "bcryptjs"],
+  serverExternalPackages: ["postgres", "bcryptjs"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },

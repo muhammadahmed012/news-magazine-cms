@@ -1,5 +1,7 @@
 // src/app/feed.xml/route.ts
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, users, categories } from "@/lib/schema";
+import { eq, desc } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -8,16 +10,25 @@ export async function GET() {
   try {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://chronicle.com";
 
-    // Fetch latest 10 published posts
-    const posts = await prisma.post.findMany({
-      where: { status: "PUBLISHED" },
-      orderBy: { publishedAt: "desc" },
-      take: 10,
-      include: {
-        author: { select: { name: true } },
-        category: { select: { name: true, slug: true } }
-      }
-    });
+    const postsResult = await db
+      .select({
+        id: posts.id,
+        title: posts.title,
+        subtitle: posts.subtitle,
+        slug: posts.slug,
+        excerpt: posts.excerpt,
+        publishedAt: posts.publishedAt,
+        createdAt: posts.createdAt,
+        authorName: users.name,
+        categorySlug: categories.slug,
+        categoryName: categories.name,
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(eq(posts.status, "PUBLISHED"))
+      .orderBy(desc(posts.publishedAt))
+      .limit(10);
 
     let rss = `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -29,8 +40,8 @@ export async function GET() {
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
 `;
 
-    posts.forEach((post) => {
-      const postUrl = `${siteUrl}/${post.category.slug}/${post.slug}`;
+    postsResult.forEach((post) => {
+      const postUrl = `${siteUrl}/${post.categorySlug}/${post.slug}`;
       const pubDate = post.publishedAt ? new Date(post.publishedAt).toUTCString() : new Date(post.createdAt).toUTCString();
       const excerptClean = (post.excerpt || post.subtitle || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -39,8 +50,8 @@ export async function GET() {
       <link>${postUrl}</link>
       <guid isPermaLink="true">${postUrl}</guid>
       <pubDate>${pubDate}</pubDate>
-      <dc:creator>${post.author.name || "Chronicle Staff"}</dc:creator>
-      <category>${post.category.name}</category>
+      <dc:creator>${post.authorName || "Chronicle Staff"}</dc:creator>
+      <category>${post.categoryName}</category>
       <description>${excerptClean}</description>
     </item>
 `;

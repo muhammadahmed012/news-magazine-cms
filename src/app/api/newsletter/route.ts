@@ -1,6 +1,8 @@
 // src/app/api/newsletter/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { newsletterSubscribers } from "@/lib/schema";
+import { eq } from "drizzle-orm";
 
 const rateLimit = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 3;
@@ -38,11 +40,23 @@ export async function POST(req: Request) {
 
     const sanitizedEmail = email.trim().toLowerCase();
 
-    await prisma.newsletterSubscriber.upsert({
-      where: { email: sanitizedEmail },
-      create: { email: sanitizedEmail, active: true },
-      update: { active: true },
-    });
+    const existing = await db
+      .select()
+      .from(newsletterSubscribers)
+      .where(eq(newsletterSubscribers.email, sanitizedEmail))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(newsletterSubscribers)
+        .set({ active: true })
+        .where(eq(newsletterSubscribers.email, sanitizedEmail));
+    } else {
+      await db.insert(newsletterSubscribers).values({
+        email: sanitizedEmail,
+        active: true,
+      });
+    }
 
     return NextResponse.redirect(new URL("/?subscribed=1", req.url), { status: 303 });
   } catch (err) {

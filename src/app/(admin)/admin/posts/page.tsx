@@ -1,19 +1,23 @@
 // src/app/(admin)/admin/posts/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, users, categories } from "@/lib/schema";
+import { eq, desc, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
 import { Plus, Search, Calendar, User, Eye } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPostsPage() {
-  // Fetch all posts ordered by creation date
-  const posts = await prisma.post.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      author: { select: { name: true } },
-      category: { select: { name: true } },
-    },
-  });
+  const postList = await db
+    .select({
+      ...getTableColumns(posts),
+      authorName: users.name,
+      categoryName: categories.name,
+    })
+    .from(posts)
+    .innerJoin(users, eq(posts.authorId, users.id))
+    .innerJoin(categories, eq(posts.categoryId, categories.id))
+    .orderBy(desc(posts.createdAt));
 
   return (
     <div className="flex flex-col gap-8 select-none">
@@ -52,7 +56,7 @@ export default async function AdminPostsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle text-xs font-semibold text-text-primary">
-              {posts.map((post) => {
+              {postList.map((post) => {
                 const dateStr = new Date(post.createdAt).toLocaleDateString("en-US", {
                   month: "short",
                   day: "numeric",
@@ -71,8 +75,8 @@ export default async function AdminPostsPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-gray-500">{post.category.name}</td>
-                    <td className="px-6 py-4 text-gray-500">{post.author.name}</td>
+                    <td className="px-6 py-4 text-gray-500">{post.categoryName}</td>
+                    <td className="px-6 py-4 text-gray-500">{post.authorName}</td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
                         post.status === "PUBLISHED"
@@ -97,7 +101,7 @@ export default async function AdminPostsPage() {
                   </tr>
                 );
               })}
-              {posts.length === 0 && (
+              {postList.length === 0 && (
                 <tr>
                   <td colSpan={7} className="text-center py-12 text-xs text-gray-400 italic">No posts found.</td>
                 </tr>

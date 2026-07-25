@@ -1,7 +1,18 @@
 // src/app/(public)/[category]/[postSlug]/page.tsx
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import {
+  posts,
+  categories,
+  users,
+  tags,
+  postTags,
+  comments,
+  ads,
+  settings,
+} from "@/lib/schema";
+import { eq, desc, and, ne, sql, getTableColumns } from "drizzle-orm";
 import { getPostPageData } from "@/lib/queries";
 import { incrementPostViews } from "@/actions/posts";
 import Link from "next/link";
@@ -18,13 +29,17 @@ export const dynamicParams = true;
 
 export async function generateStaticParams() {
   try {
-    const posts = await prisma.post.findMany({
-      where: { status: "PUBLISHED" },
-      select: { slug: true, category: { select: { slug: true } } },
-      orderBy: { publishedAt: "desc" },
-      take: 50,
-    });
-    return posts.map((post) => ({ slug: post.category.slug, postSlug: post.slug }));
+    const postRows = await db
+      .select({
+        slug: posts.slug,
+        categorySlug: categories.slug,
+      })
+      .from(posts)
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(eq(posts.status, "PUBLISHED"))
+      .orderBy(desc(posts.publishedAt))
+      .limit(50);
+    return postRows.map((row) => ({ slug: row.categorySlug, postSlug: row.slug }));
   } catch (error) {
     console.error("[SSG] Failed to generate post params:", error);
     return [];
@@ -202,32 +217,112 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   const resolvedParams = await params;
   const { category: categorySlug, postSlug } = resolvedParams;
 
-  // 1. Fetch post details (must be first for not-found check)
-  let post;
+  // 1. Fetch post details with author and category
+  let post: any;
   try {
-    post = await prisma.post.findUnique({
-      where: { slug: postSlug },
-      include: {
-        author: true,
-        category: true,
-        tags: { select: { id: true, name: true, slug: true } },
-        comments: {
-          where: { status: "APPROVED" },
-          orderBy: { createdAt: "desc" },
-          include: {
-            author: {
-              select: { name: true, image: true, role: true }
-            }
-          }
-        }
-      }
-    });
+    const [postRow] = await db
+      .select({
+        ...getTableColumns(posts),
+        authorName: users.name,
+        authorEmail: users.email,
+        authorImage: users.image,
+        authorRole: users.role,
+        authorBio: users.bio,
+        authorTitle: users.title,
+        categoryName: categories.name,
+        categorySlug: categories.slug,
+        categoryColor: categories.color,
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(eq(posts.slug, postSlug))
+      .limit(1);
+
+    if (!postRow || postRow.status !== "PUBLISHED") {
+      notFound();
+    }
+
+    const {
+      authorName,
+      authorEmail,
+      authorImage,
+      authorRole,
+      authorBio,
+      authorTitle,
+      categoryName,
+      categorySlug: catSlug,
+      categoryColor,
+      ...basePost
+    } = postRow;
+
+    // Fetch tags
+    const tagRows = await db
+      .select({
+        id: tags.id,
+        name: tags.name,
+        slug: tags.slug,
+      })
+      .from(postTags)
+      .innerJoin(tags, eq(postTags.tagId, tags.id))
+      .where(eq(postTags.postId, postRow.id));
+
+    // Fetch approved comments
+    const commentRows = await db
+      .select({
+        id: comments.id,
+        content: comments.content,
+        status: comments.status,
+        postId: comments.postId,
+        authorId: comments.authorId,
+        guestName: comments.guestName,
+        guestEmail: comments.guestEmail,
+        parentId: comments.parentId,
+        createdAt: comments.createdAt,
+        updatedAt: comments.updatedAt,
+        authorName: users.name,
+        authorImage: users.image,
+        authorRole: users.role,
+      })
+      .from(comments)
+      .leftJoin(users, eq(comments.authorId, users.id))
+      .where(and(eq(comments.postId, postRow.id), eq(comments.status, "APPROVED")))
+      .orderBy(desc(comments.createdAt));
+
+    post = {
+      ...basePost,
+      author: {
+        id: basePost.authorId,
+        name: authorName,
+        email: authorEmail,
+        image: authorImage,
+        role: authorRole,
+        bio: authorBio,
+        title: authorTitle,
+      },
+      category: {
+        id: basePost.categoryId,
+        name: categoryName,
+        slug: catSlug,
+        color: categoryColor,
+      },
+      tags: tagRows,
+      comments: commentRows.map((c) => ({
+        id: c.id,
+        content: c.content,
+        status: c.status,
+        postId: c.postId,
+        authorId: c.authorId,
+        guestName: c.guestName,
+        guestEmail: c.guestEmail,
+        parentId: c.parentId,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        author: c.authorName ? { name: c.authorName, image: c.authorImage, role: c.authorRole } : null,
+      })),
+    };
   } catch (error) {
     console.error("[PostPage] Failed to fetch post:", error);
-    notFound();
-  }
-
-  if (!post || post.status !== "PUBLISHED") {
     notFound();
   }
 
@@ -237,7 +332,7 @@ export default async function PostDetailPage({ params }: PostPageProps) {
   // 3. Compile TipTap content & headings
   const { html } = parseTipTap(post.content);
 
-  // 4. Fetch all secondary data in parallel using cached queries
+  // 4. Fetch all secondary data in parallel
   let relatedPosts: any[] = [];
   let sidebarAd: any = null;
   let aboveHeadingAd: any = null;
@@ -258,15 +353,18 @@ export default async function PostDetailPage({ params }: PostPageProps) {
       relatedPosts,
       [sidebarAd, aboveHeadingAd, belowHeadingAd, afterPara1Ad, afterPara2Ad, afterPara3Ad, startOfArticleAd, endOfArticleAd, sidebarConfig, footerSetting, trendingPosts, latestPosts],
     ] = await Promise.all([
-      prisma.post.findMany({
-        where: {
-          categoryId: post.categoryId,
-          id: { not: post.id },
-          status: "PUBLISHED",
-        },
-        take: 3,
-        orderBy: { publishedAt: "desc" },
-      }),
+      db
+        .select()
+        .from(posts)
+        .where(
+          and(
+            eq(posts.categoryId, post.categoryId),
+            ne(posts.id, post.id),
+            eq(posts.status, "PUBLISHED")
+          )
+        )
+        .orderBy(desc(posts.publishedAt))
+        .limit(3),
       getPostPageData(),
     ]);
   } catch (error) {
@@ -449,7 +547,7 @@ export default async function PostDetailPage({ params }: PostPageProps) {
 
               {/* List of comments */}
               <div className="divide-y divide-border-subtle">
-                {post.comments.map((comment) => (
+                {post.comments.map((comment: any) => (
                   <div key={comment.id} className="py-6 first:pt-0 flex gap-4">
                     <div className="w-10 h-10 rounded-full bg-gray-200 text-text-primary flex items-center justify-center font-bold text-sm shrink-0">
                       {(comment.author?.name || comment.guestName)?.[0]?.toUpperCase()}
@@ -533,13 +631,13 @@ export default async function PostDetailPage({ params }: PostPageProps) {
 
             if (widget.type === "trending") {
               const count = widget.settings?.count || 5;
-              const posts = trendingPosts.slice(0, count);
-              if (posts.length === 0) return null;
+              const trendingSlice = trendingPosts.slice(0, count);
+              if (trendingSlice.length === 0) return null;
               return (
                 <div key={widget.id} className="border border-border-subtle p-5 rounded-md bg-white">
                   <h3 className="font-bold text-xs uppercase tracking-widest text-text-primary mb-4 pb-2 border-b border-border-subtle">{widget.title}</h3>
                   <div className="flex flex-col gap-3">
-                    {posts.map((p: any, idx: number) => (
+                    {trendingSlice.map((p: any, idx: number) => (
                       <div key={p.id} className="flex gap-3 group">
                         <span className="text-2xl font-black text-gray-200 leading-none shrink-0 w-8 text-center">{idx + 1}</span>
                         <div className="flex flex-col gap-1">
@@ -556,15 +654,15 @@ export default async function PostDetailPage({ params }: PostPageProps) {
             if (widget.type === "latest_posts") {
               const count = widget.settings?.count || 5;
               const catSlug = widget.settings?.categorySlug;
-              let posts = latestPosts;
-              if (catSlug) posts = posts.filter((p: any) => p.category.slug === catSlug);
-              posts = posts.slice(0, count);
-              if (posts.length === 0) return null;
+              let latestSlice = latestPosts;
+              if (catSlug) latestSlice = latestSlice.filter((p: any) => p.category.slug === catSlug);
+              latestSlice = latestSlice.slice(0, count);
+              if (latestSlice.length === 0) return null;
               return (
                 <div key={widget.id} className="border border-border-subtle p-5 rounded-md bg-white">
                   <h3 className="font-bold text-xs uppercase tracking-widest text-text-primary mb-4 pb-2 border-b border-border-subtle">{widget.title}</h3>
                   <div className="flex flex-col gap-3">
-                    {posts.map((p: any) => (
+                    {latestSlice.map((p: any) => (
                       <div key={p.id} className="flex gap-3 group">
                         {p.featuredImage && (
                           <Link href={`/${p.category.slug}/${p.slug}`} className="w-16 h-12 rounded overflow-hidden shrink-0 bg-gray-100 relative">

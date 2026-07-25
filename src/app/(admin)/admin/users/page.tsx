@@ -1,5 +1,7 @@
 // src/app/(admin)/admin/users/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { users, posts } from "@/lib/schema";
+import { eq, sql } from "drizzle-orm";
 import { createUser, deleteUser, changePassword, updateUserRole } from "@/actions/admin-users";
 import { Users, UserPlus, Trash2, KeyRound, ShieldCheck } from "lucide-react";
 
@@ -14,12 +16,22 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default async function AdminUsersPage() {
-  const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      _count: { select: { posts: true } },
-    },
-  });
+  const usersList = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      title: users.title,
+      bio: users.bio,
+      image: users.image,
+      createdAt: users.createdAt,
+      postCount: sql<number>`count(${posts.id})::int`,
+    })
+    .from(users)
+    .leftJoin(posts, eq(users.id, posts.authorId))
+    .groupBy(users.id, users.name, users.email, users.role, users.title, users.bio, users.image, users.createdAt)
+    .orderBy(sql`${users.createdAt} DESC`);
 
   return (
     <div className="flex flex-col gap-8 select-none">
@@ -38,20 +50,18 @@ export default async function AdminUsersPage() {
         <div className="xl:col-span-8 bg-white border border-border-subtle rounded-md shadow-sm overflow-hidden">
           <div className="px-6 py-4 bg-bg-light/40 border-b border-border-subtle">
             <h3 className="text-xs font-bold uppercase tracking-widest text-text-primary">
-              All Users ({users.length})
+              All Users ({usersList.length})
             </h3>
           </div>
 
           <div className="divide-y divide-border-subtle">
-            {users.map((user) => (
+            {usersList.map((user) => (
               <div key={user.id} className="px-6 py-4 hover:bg-bg-light/30 transition-colors">
                 <div className="flex items-start gap-4">
-                  {/* Avatar */}
                   <div className="w-10 h-10 rounded-full bg-brand-primary text-white flex items-center justify-center font-black text-sm shrink-0">
                     {user.name?.[0]?.toUpperCase() || "?"}
                   </div>
 
-                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="text-xs font-black text-text-primary">{user.name}</span>
@@ -64,14 +74,12 @@ export default async function AdminUsersPage() {
                     </div>
                     <p className="text-[10px] text-gray-400 mt-0.5 font-semibold">{user.email}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5 font-semibold">
-                      {user._count.posts} article{user._count.posts !== 1 ? "s" : ""} · Joined{" "}
+                      {user.postCount} article{user.postCount !== 1 ? "s" : ""} · Joined{" "}
                       {new Date(user.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
                     </p>
                   </div>
 
-                  {/* Actions */}
                   <div className="flex flex-col gap-2 shrink-0">
-                    {/* Change Role */}
                     <form action={updateUserRole} className="flex items-center gap-1.5">
                       <input type="hidden" name="userId" value={user.id} />
                       <select
@@ -92,7 +100,6 @@ export default async function AdminUsersPage() {
                       </button>
                     </form>
 
-                    {/* Delete */}
                     <form action={deleteUser}>
                       <input type="hidden" name="userId" value={user.id} />
                       <button
@@ -106,7 +113,6 @@ export default async function AdminUsersPage() {
                   </div>
                 </div>
 
-                {/* Change Password section */}
                 <details className="mt-3">
                   <summary className="text-[10px] font-bold text-gray-400 hover:text-brand-primary cursor-pointer flex items-center gap-1.5 transition-colors">
                     <KeyRound className="w-3.5 h-3.5" /> Change Password
@@ -132,7 +138,7 @@ export default async function AdminUsersPage() {
               </div>
             ))}
 
-            {users.length === 0 && (
+            {usersList.length === 0 && (
               <p className="text-center py-12 text-xs text-gray-400 italic">No users found.</p>
             )}
           </div>

@@ -1,10 +1,12 @@
 // src/app/(admin)/admin/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, categories, newsletterSubscribers, comments, users } from "@/lib/schema";
+import { eq, desc, sql, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
 import {
   FileText,
   Folder,
-  Users,
+  Users as UsersIcon,
   MessageSquare,
   Eye,
   Plus,
@@ -15,33 +17,51 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
-  // 1. Fetch counts from database in parallel
-  const [postCount, categoryCount, subscriberCount, commentCount, recentPosts, stats] = await Promise.all([
-    prisma.post.count(),
-    prisma.category.count(),
-    prisma.newsletterSubscriber.count(),
-    prisma.comment.count(),
-    prisma.post.findMany({
-      take: 5,
-      orderBy: { createdAt: "desc" },
-      include: {
-        author: { select: { name: true } },
-        category: { select: { name: true } }
-      }
-    }),
-    prisma.post.aggregate({
-      _sum: {
-        viewCount: true
-      }
-    })
+  const [
+    postCountResult,
+    categoryCountResult,
+    subscriberCountResult,
+    commentCountResult,
+    rawRecentPosts,
+    totalViewsResult,
+  ] = await Promise.all([
+    db.select({ count: sql<number>`count(*)::int` }).from(posts).then((r) => r[0]?.count ?? 0),
+    db.select({ count: sql<number>`count(*)::int` }).from(categories).then((r) => r[0]?.count ?? 0),
+    db.select({ count: sql<number>`count(*)::int` }).from(newsletterSubscribers).then((r) => r[0]?.count ?? 0),
+    db.select({ count: sql<number>`count(*)::int` }).from(comments).then((r) => r[0]?.count ?? 0),
+    db
+      .select({
+        ...getTableColumns(posts),
+        authorName: users.name,
+        categoryName: categories.name,
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .orderBy(desc(posts.createdAt))
+      .limit(5),
+    db
+      .select({ total: sql<number>`coalesce(sum(${posts.viewCount}), 0)::int` })
+      .from(posts)
+      .then((r) => r[0]?.total ?? 0),
   ]);
 
-  const totalViews = stats._sum.viewCount || 0;
+  const recentPosts = rawRecentPosts.map((row) => ({
+    ...row,
+    author: { name: row.authorName },
+    category: { name: row.categoryName },
+  }));
+
+  const postCount = postCountResult;
+  const categoryCount = categoryCountResult;
+  const subscriberCount = subscriberCountResult;
+  const commentCount = commentCountResult;
+  const totalViews = totalViewsResult;
 
   const statsCards = [
     { label: "Total Articles", value: postCount, icon: FileText, color: "text-blue-500", bg: "bg-blue-50" },
     { label: "Total Categories", value: categoryCount, icon: Folder, color: "text-green-500", bg: "bg-green-50" },
-    { label: "Subscribers", value: subscriberCount, icon: Users, color: "text-purple-500", bg: "bg-purple-50" },
+    { label: "Subscribers", value: subscriberCount, icon: UsersIcon, color: "text-purple-500", bg: "bg-purple-50" },
     { label: "Comments", value: commentCount, icon: MessageSquare, color: "text-orange-500", bg: "bg-orange-50" }
   ];
 

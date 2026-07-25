@@ -1,27 +1,42 @@
 // src/app/(admin)/admin/comments/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { comments, posts, categories, users } from "@/lib/schema";
 import { revalidatePath } from "next/cache";
+import { eq, desc } from "drizzle-orm";
 import { MessageSquare, CheckCircle, XCircle, Trash2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCommentsPage() {
-  const comments = await prisma.comment.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      post: {
-        select: { title: true, slug: true, category: { select: { slug: true } } },
-      },
-      author: { select: { name: true } },
-    },
-  });
+  const commentsList = await db
+    .select({
+      id: comments.id,
+      content: comments.content,
+      status: comments.status,
+      postId: comments.postId,
+      authorId: comments.authorId,
+      guestName: comments.guestName,
+      guestEmail: comments.guestEmail,
+      parentId: comments.parentId,
+      createdAt: comments.createdAt,
+      updatedAt: comments.updatedAt,
+      postTitle: posts.title,
+      postSlug: posts.slug,
+      categorySlug: categories.slug,
+      authorName: users.name,
+    })
+    .from(comments)
+    .innerJoin(posts, eq(comments.postId, posts.id))
+    .innerJoin(categories, eq(posts.categoryId, categories.id))
+    .leftJoin(users, eq(comments.authorId, users.id))
+    .orderBy(desc(comments.createdAt));
 
   const handleApprove = async (formData: FormData) => {
     "use server";
     const id = formData.get("commentId") as string;
     if (!id) return;
-    await prisma.comment.update({ where: { id }, data: { status: "APPROVED" } });
+    await db.update(comments).set({ status: "APPROVED" }).where(eq(comments.id, id));
     revalidatePath("/admin/comments");
   };
 
@@ -29,7 +44,7 @@ export default async function AdminCommentsPage() {
     "use server";
     const id = formData.get("commentId") as string;
     if (!id) return;
-    await prisma.comment.update({ where: { id }, data: { status: "SPAM" } });
+    await db.update(comments).set({ status: "SPAM" }).where(eq(comments.id, id));
     revalidatePath("/admin/comments");
   };
 
@@ -37,13 +52,13 @@ export default async function AdminCommentsPage() {
     "use server";
     const id = formData.get("commentId") as string;
     if (!id) return;
-    await prisma.comment.delete({ where: { id } });
+    await db.delete(comments).where(eq(comments.id, id));
     revalidatePath("/admin/comments");
   };
 
-  const approved = comments.filter((c) => c.status === "APPROVED");
-  const pending = comments.filter((c) => c.status === "PENDING");
-  const spam = comments.filter((c) => c.status === "SPAM");
+  const approved = commentsList.filter((c) => c.status === "APPROVED");
+  const pending = commentsList.filter((c) => c.status === "PENDING");
+  const spam = commentsList.filter((c) => c.status === "SPAM");
 
   return (
     <div className="flex flex-col gap-8 select-none">
@@ -56,7 +71,6 @@ export default async function AdminCommentsPage() {
         </p>
       </div>
 
-      {/* Status counts */}
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: "Approved", count: approved.length, color: "text-green-600", bg: "bg-green-50 border-green-200" },
@@ -70,7 +84,6 @@ export default async function AdminCommentsPage() {
         ))}
       </div>
 
-      {/* Comments list */}
       <div className="bg-white border border-border-subtle rounded-md shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -85,10 +98,10 @@ export default async function AdminCommentsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle text-xs font-semibold text-text-primary">
-              {comments.map((comment) => (
+              {commentsList.map((comment) => (
                 <tr key={comment.id} className="hover:bg-bg-light/20 transition-colors">
                   <td className="px-6 py-4 font-bold">
-                    {comment.author?.name || comment.guestName || "Anonymous"}
+                    {comment.authorName || comment.guestName || "Anonymous"}
                     {!comment.authorId && (
                       <span className="block text-[9px] text-gray-400 font-semibold">Guest</span>
                     )}
@@ -98,11 +111,11 @@ export default async function AdminCommentsPage() {
                   </td>
                   <td className="px-6 py-4">
                     <Link
-                      href={`/${comment.post.category.slug}/${comment.post.slug}`}
+                      href={`/${comment.categorySlug}/${comment.postSlug}`}
                       target="_blank"
                       className="flex items-center gap-1 text-brand-primary hover:underline max-w-[150px] truncate"
                     >
-                      {comment.post.title}
+                      {comment.postTitle}
                       <ExternalLink className="w-3 h-3 shrink-0" />
                     </Link>
                   </td>
@@ -150,7 +163,7 @@ export default async function AdminCommentsPage() {
                   </td>
                 </tr>
               ))}
-              {comments.length === 0 && (
+              {commentsList.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-center py-12 text-xs text-gray-400 italic">No comments to moderate.</td>
                 </tr>

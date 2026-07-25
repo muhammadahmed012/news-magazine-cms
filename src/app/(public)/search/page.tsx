@@ -1,5 +1,7 @@
 // src/app/(public)/search/page.tsx
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
+import { posts, users, categories } from "@/lib/schema";
+import { eq, desc, and, or, ilike, getTableColumns } from "drizzle-orm";
 import Link from "next/link";
 import { Calendar, Search } from "lucide-react";
 import OptimizedImage from "@/components/public/OptimizedImage";
@@ -16,26 +18,38 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const resolvedSearchParams = await searchParams;
   const query = resolvedSearchParams.q || "";
 
-  // 1. Fetch matching posts if a query exists
-  let posts: any[] = [];
+  let postList: any[] = [];
   if (query.trim()) {
-    posts = await prisma.post.findMany({
-      where: {
-        status: "PUBLISHED",
-        OR: [
-          { title: { contains: query } },
-          { subtitle: { contains: query } },
-          { excerpt: { contains: query } },
-          { content: { contains: query } },
-        ],
-      },
-      include: {
-        author: { select: { name: true } },
-        category: { select: { name: true, slug: true, color: true } },
-      },
-      orderBy: { publishedAt: "desc" },
-      take: 20,
-    });
+    const rawPosts = await db
+      .select({
+        ...getTableColumns(posts),
+        authorName: users.name,
+        categoryName: categories.name,
+        categorySlug: categories.slug,
+        categoryColor: categories.color,
+      })
+      .from(posts)
+      .innerJoin(users, eq(posts.authorId, users.id))
+      .innerJoin(categories, eq(posts.categoryId, categories.id))
+      .where(
+        and(
+          eq(posts.status, "PUBLISHED"),
+          or(
+            ilike(posts.title, `%${query}%`),
+            ilike(posts.subtitle, `%${query}%`),
+            ilike(posts.excerpt, `%${query}%`),
+            ilike(posts.content, `%${query}%`)
+          )
+        )
+      )
+      .orderBy(desc(posts.publishedAt))
+      .limit(20);
+
+    postList = rawPosts.map((row) => ({
+      ...row,
+      author: { name: row.authorName },
+      category: { name: row.categoryName, slug: row.categorySlug, color: row.categoryColor },
+    }));
   }
 
   return (
@@ -47,7 +61,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </h1>
         <p className="text-xs font-bold text-gray-400 mt-2">
           {query.trim()
-            ? `Found ${posts.length} articles matching "${query}"`
+            ? `Found ${postList.length} articles matching "${query}"`
             : "Enter a search query to browse our article archives."}
         </p>
       </div>
@@ -72,7 +86,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       </div>
 
       {/* Results grid */}
-      {posts.length === 0 ? (
+      {postList.length === 0 ? (
         <div className="text-center py-20 bg-bg-light border border-border-subtle rounded-md">
           <p className="text-sm font-semibold text-gray-500">
             {query.trim() ? "No articles matched your query. Try different keywords." : "Waiting for your search query."}
@@ -80,7 +94,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {posts.map((post) => {
+          {postList.map((post) => {
             const dateStr = post.publishedAt
               ? new Date(post.publishedAt).toLocaleDateString("en-US", {
                   month: "short",
